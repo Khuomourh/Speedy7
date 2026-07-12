@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "chrome",
+            "request": "launch",
+            "name": "Open Speedy7 Preview",
+            "url": "http://127.0.0.1:5177/",
+            "webRoot": "${workspaceFolder}"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run Speedy7 Server",
+            "program": "${workspaceFolder}/server.js",
+            "console": "integratedTerminal"
+        }
+    ]
+}

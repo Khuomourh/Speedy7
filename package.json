@@ -1,24 +1,18 @@
-{
-  "name": "speedy7-parts-runner",
+﻿{
+  "name": "speedy7-preview",
   "version": "1.0.0",
-  "description": "WhatsApp-first car parts runner backend for Speedy 7",
-  "main": "src/server.js",
+  "private": true,
+  "description": "Speedy7 car parts search and quote app preview.",
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "check": "node --check app.js && node --check server.js"
   },
   "keywords": [
-    "whatsapp",
-    "car-parts",
-    "runner",
-    "speedy7"
+    "speedy7",
+    "auto-parts",
+    "quotes",
+    "supabase"
   ],
-  "author": "Speedy 7",
-  "license": "MIT",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "pg": "^8.22.0"
-  }
+  "license": "UNLICENSED"
 }

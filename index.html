@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Speedy7 Parts Finder</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Speedy7 navigation">
+        <a class="brand" href="#customerView" aria-label="Speedy7 home">
+          <img class="brand-logo" src="assets/speedy7-logo.png" alt="Speedy7 logo">
+          <span class="brand-fallback" aria-hidden="true">
+            <span class="speed-mark"><i></i><b></b><em></em></span>
+            <span><strong>speedy7</strong><small>Speed & Time</small></span>
+          </span>
+        </a>
+
+        <nav class="nav-list" aria-label="Main views">
+          <button class="nav-item is-active" data-view="customerView" type="button"><span>01</span>Search Parts</button>
+          <button class="nav-item" data-view="garageView" type="button"><span>02</span>My Garage</button>
+          <button class="nav-item" data-view="quotesView" type="button"><span>03</span>Quotes</button>
+          <button class="nav-item" data-view="ordersView" type="button"><span>04</span>Orders</button>
+          <button class="nav-item" data-view="assistantView" type="button"><span>05</span>Shop Assistant</button>
+          <button class="nav-item" data-view="adminView" type="button"><span>06</span>Admin Database</button>
+        </nav>
+
+        <section class="login-card" aria-labelledby="loginTitle">
+          <p class="eyebrow">Account</p>
+          <h2 id="loginTitle">Login preview</h2>
+          <form id="loginForm" class="stacked-form">
+            <label>Action<select id="authModeSelect"><option value="login">Log in</option><option value="signup">Create account</option></select></label>
+            <label>Email<input id="loginEmail" type="email" value="customer@speedy7.co.bw" autocomplete="username"></label>
+            <label>Password<input id="loginPassword" type="password" value="speedy7" autocomplete="current-password"></label>
+            <label id="fullNameLabel" hidden>Full name<input id="fullNameInput" type="text" value="Khuomourh Ikanyeng" autocomplete="name"></label>
+            <label id="phoneLabel" hidden>Phone<input id="phoneInput" type="tel" value="+267 71 000 000" autocomplete="tel"></label>
+            <label>Role<select id="roleSelect"><option value="customer">Customer</option><option value="assistant">Shop assistant</option><option value="admin">Admin</option></select></label>
+            <label id="adminInviteLabel" hidden>Admin invite code<input id="adminInviteInput" type="password" autocomplete="off"></label>
+            <div class="auth-actions">
+              <button class="primary-btn" id="authSubmitBtn" type="submit">Log in</button>
+              <button class="ghost-btn" id="logoutBtn" type="button" hidden>Log out</button>
+            </div>
+          </form>
+          <p id="loginStatus" class="status-pill">Guest browsing</p>
+          <p id="connectionStatus" class="status-pill">Checking connection</p>
+        </section>
+
+        <section class="integration-strip" aria-label="Future integrations">
+          <span>WhatsApp</span><span>Facebook</span><span>Supabase</span><span>Vercel</span>
+        </section>
+      </aside>
+
+      <main class="main-stage">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Speedy7 app preview</p>
+            <h1>Search once. Get parts quotes from shops fast.</h1>
+          </div>
+          <div class="top-actions">
+            <button class="ghost-btn" id="socialLeadBtn" type="button">Facebook lead</button>
+            <button class="ghost-btn" id="whatsappLeadBtn" type="button">WhatsApp quote</button>
+            <button class="primary-btn" id="checkoutBtn" type="button">Buy selected</button>
+          </div>
+        </header>
+
+        <section id="customerView" class="view is-visible" aria-labelledby="customerTitle">
+          <div class="hero-panel">
+            <div class="hero-copy">
+              <p class="eyebrow">Customer search</p>
+              <h2 id="customerTitle">Use engine number today, collect VIN for smarter matching tomorrow.</h2>
+              <p>Register a car once. Speedy7 links compatible parts, shop offers, quote replies, orders, and delivery options to that vehicle.</p>
+            </div>
+            <form id="carForm" class="car-form">
+              <label>VIN<input id="vinInput" type="text" placeholder="Optional now, useful later"></label>
+              <label>Engine number<input id="engineInput" type="text" value="1NZ-5087742" required></label>
+              <label>Vehicle<input id="vehicleInput" type="text" value="Toyota RunX 1.5 2004"></label>
+              <button class="primary-btn" type="submit">Register car</button>
+            </form>
+          </div>
+
+          <div class="search-band">
+            <label class="search-box"><span>Search VIN, engine number, vehicle, or part</span><input id="searchInput" type="search" value="1NZ-5087742" placeholder="Try brake pad, bearing, 1NZ, Polo"></label>
+            <div class="quick-stats">
+              <article><strong id="linkedPartsCount">0</strong><span>linked parts</span></article>
+              <article><strong id="quoteCount">0</strong><span>shop offers</span></article>
+              <article><strong id="deliveryEta">15 min</strong><span>fastest reply</span></article>
+            </div>
+          </div>
+
+          <div class="workspace-grid">
+            <section class="panel category-panel" aria-labelledby="categoryTitle">
+              <div class="panel-head"><div><p class="eyebrow">Categories</p><h2 id="categoryTitle">Part groups</h2></div></div>
+              <div id="categoryTabs" class="category-list" role="tablist" aria-label="Part categories"></div>
+            </section>
+            <section class="panel parts-panel" aria-labelledby="partsTitle">
+              <div class="panel-head"><div><p class="eyebrow">Matched catalog</p><h2 id="partsTitle">Compatible parts</h2></div><button class="ghost-btn compact" id="resetFiltersBtn" type="button">Reset</button></div>
+              <div id="partsList" class="parts-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="garageView" class="view" aria-labelledby="garageTitle">
+          <div class="panel full-panel">
+            <div class="panel-head"><div><p class="eyebrow">My garage</p><h2 id="garageTitle">Registered vehicles</h2></div><button class="ghost-btn compact" id="seedGarageBtn" type="button">Add samples</button></div>
+            <div id="garageList" class="garage-list"></div>
+          </div>
+          <div class="panel full-panel">
+            <div class="panel-head"><div><p class="eyebrow">Compatibility</p><h2>VIN and engine learning</h2></div></div>
+            <p class="plain-copy">Speedy7 stores VIN and engine number together. Early searches can use engine numbers, while the database learns which VINs and parts match for future exact-fit lookup.</p>
+          </div>
+        </section>
+
+        <section id="quotesView" class="view" aria-labelledby="quotesTitle">
+          <div class="two-column-grid">
+            <section class="panel" aria-labelledby="photoTitle">
+              <div class="panel-head"><div><p class="eyebrow">Unknown part</p><h2 id="photoTitle">Photo quote request</h2></div></div>
+              <form id="photoQuoteForm" class="stacked-form quote-form">
+                <label>Vehicle<select id="photoVehicleSelect"></select></label>
+                <label>Take or upload photo<input id="photoInput" type="file" accept="image/*" capture="environment"></label>
+                <div id="photoPreview" class="photo-preview"><span>Part photo preview</span></div>
+                <label>Description<textarea id="photoDescription" rows="4" placeholder="Example: front left shock, worn bush, unknown bearing"></textarea></label>
+                <button class="primary-btn" type="submit">Send to assistants</button>
+              </form>
+            </section>
+            <section class="panel" aria-labelledby="liveQuotesTitle">
+              <div class="panel-head"><div><p class="eyebrow">Quote room</p><h2 id="liveQuotesTitle">Different shop offers</h2></div><button class="ghost-btn compact" id="approveBestBtn" type="button">Approve best</button></div>
+              <div id="quoteList" class="quote-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="ordersView" class="view" aria-labelledby="ordersTitle">
+          <div class="two-column-grid">
+            <section class="panel" aria-labelledby="cartTitle">
+              <div class="panel-head"><div><p class="eyebrow">Cart</p><h2 id="cartTitle">Selected parts</h2></div></div>
+              <div id="cartList" class="cart-list"></div>
+            </section>
+            <section class="panel" aria-labelledby="checkoutTitle">
+              <div class="panel-head"><div><p class="eyebrow">Order</p><h2 id="checkoutTitle">Checkout preview</h2></div></div>
+              <form id="checkoutForm" class="stacked-form">
+                <label>Customer name<input id="customerName" type="text" value="Khuomourh"></label>
+                <label>Phone<input id="customerPhone" type="tel" value="+267 71 000 000"></label>
+                <label>Fulfilment<select id="fulfilment"><option>Delivery</option><option>Pickup</option></select></label>
+                <label>Payment<select id="payment"><option>Pay on delivery</option><option>Card placeholder</option><option>Mobile money placeholder</option></select></label>
+                <button class="primary-btn" type="submit">Place order</button>
+              </form>
+              <div id="orderStatus" class="order-status">No order placed yet.</div>
+            </section>
+          </div>
+        </section>
+
+        <section id="assistantView" class="view" aria-labelledby="assistantTitle">
+          <div class="two-column-grid">
+            <section class="panel" aria-labelledby="assistantTitle">
+              <div class="panel-head"><div><p class="eyebrow">Shop assistant</p><h2 id="assistantTitle">WhatsApp quote inbox</h2></div><button class="ghost-btn compact" id="registerAssistantBtn" type="button">Register</button></div>
+              <div id="assistantProfile" class="assistant-profile"></div>
+              <div id="assistantInbox" class="assistant-inbox"></div>
+            </section>
+            <section class="panel" aria-labelledby="replyTitle">
+              <div class="panel-head"><div><p class="eyebrow">Reply builder</p><h2 id="replyTitle">Send price back</h2></div></div>
+              <form id="assistantReplyForm" class="stacked-form">
+                <label>Shop<input id="assistantShop" type="text" value="Tlokweng Auto Spares"></label>
+                <label>Price BWP<input id="assistantPrice" type="number" value="420" min="1"></label>
+                <label>ETA<select id="assistantEta"><option>15 min</option><option>30 min</option><option>Today</option><option>Tomorrow</option></select></label>
+                <label>Condition<select id="assistantCondition"><option>New</option><option>Used good</option><option>Aftermarket</option><option>OEM</option></select></label>
+                <label>Note<textarea id="assistantNote" rows="3">Available now. Can deliver through Speedy7.</textarea></label>
+                <button class="primary-btn" type="submit">Add assistant quote</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section id="adminView" class="view" aria-labelledby="adminTitle">
+          <div class="admin-grid">
+            <section class="panel" aria-labelledby="adminTitle">
+              <div class="panel-head"><div><p class="eyebrow">Owner tools</p><h2 id="adminTitle">Link car, VIN, engine, and parts</h2></div></div>
+              <form id="adminCarForm" class="stacked-form">
+                <label>VIN<input id="adminVin" type="text" value="AHT53XEC104123456"></label>
+                <label>Engine number<input id="adminEngine" type="text" value="1NZ-5087742"></label>
+                <label>Make and model<input id="adminVehicle" type="text" value="Toyota RunX 1.5 2004"></label>
+                <label>Stock item<select id="adminPartSelect"></select></label>
+                <button class="primary-btn" type="submit">Save compatibility</button>
+              </form>
+            </section>
+            <section class="panel" aria-labelledby="stockTitle">
+              <div class="panel-head"><div><p class="eyebrow">Stock upload</p><h2 id="stockTitle">Bulk stock paste</h2></div></div>
+              <form id="stockForm" class="stacked-form">
+                <label>CSV rows<textarea id="stockRows" rows="8">Engine Mount,Engine,EM-1NZ-01,650,8,AHT53XEC104123456,1NZ-5087742
+Front Brake Pads,Brake,BP-RUNX-F,380,14,AHT53XEC104123456,1NZ-5087742
+Wheel Bearing,Bearing,WB-RUNX-F,290,6,AHT53XEC104123456,1NZ-5087742</textarea></label>
+                <button class="primary-btn" type="submit">Upload stock</button>
+              </form>
+            </section>
+            <section class="panel wide-panel" aria-labelledby="schemaTitle">
+              <div class="panel-head"><div><p class="eyebrow">Supabase ready</p><h2 id="schemaTitle">Database and security map</h2></div><a class="ghost-link" href="supabase/schema.sql" target="_blank">Open SQL</a></div>
+              <div id="schemaGrid" class="schema-grid"></div>
+              <div class="security-notes"><span>RLS on customer data</span><span>Explicit Data API grants</span><span>No service role key in browser</span><span>Roles stored server-side</span></div>
+            </section>
+            <section class="panel wide-panel" aria-labelledby="analyticsTitle">
+              <div class="panel-head"><div><p class="eyebrow">Business view</p><h2 id="analyticsTitle">Demand and operations</h2></div></div>
+              <div id="analyticsGrid" class="analytics-grid"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

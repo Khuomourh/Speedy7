@@ -1,0 +1,54 @@
+﻿{
+  "categories": ["All", "Engine", "Suspension", "Brake", "Bearing", "Electrical", "Cooling", "Body", "Service"],
+  "vehicles": [
+    { "id": "veh-1", "vin": "AHT53XEC104123456", "engine": "1NZ-5087742", "label": "Toyota RunX 1.5 2004", "make": "Toyota", "model": "RunX", "year": "2004" },
+    { "id": "veh-2", "vin": "AAVZZZ6RZCU042120", "engine": "CLP-884201", "label": "VW Polo 1.4 2012", "make": "Volkswagen", "model": "Polo", "year": "2012" },
+    { "id": "veh-3", "vin": "ADNUSN1D5U0124550", "engine": "K7M-552010", "label": "Nissan NP200 1.6 2018", "make": "Nissan", "model": "NP200", "year": "2018" }
+  ],
+  "parts": [
+    { "id": "p1", "name": "Engine Mount", "category": "Engine", "sku": "EM-1NZ-01", "price": 650, "stock": 8, "condition": "New", "supplier": "Tlokweng Auto Spares", "eta": "15 min", "engines": ["1NZ-5087742"], "vins": ["AHT53XEC104123456"], "quotes": 3, "color": "#eb2333" },
+    { "id": "p2", "name": "Oil Filter", "category": "Service", "sku": "OF-TOY-90915", "price": 85, "stock": 26, "condition": "New", "supplier": "Gaborone Parts Hub", "eta": "20 min", "engines": ["1NZ-5087742"], "vins": ["AHT53XEC104123456"], "quotes": 2, "color": "#159bd7" },
+    { "id": "p3", "name": "Front Brake Pads", "category": "Brake", "sku": "BP-RUNX-F", "price": 380, "stock": 14, "condition": "Aftermarket", "supplier": "Mogoditshane Motors", "eta": "25 min", "engines": ["1NZ-5087742", "CLP-884201"], "vins": ["AHT53XEC104123456", "AAVZZZ6RZCU042120"], "quotes": 4, "color": "#20242a" },
+    { "id": "p4", "name": "Shock Absorber", "category": "Suspension", "sku": "SA-POLO-F", "price": 720, "stock": 5, "condition": "New", "supplier": "Gaborone Parts Hub", "eta": "30 min", "engines": ["CLP-884201"], "vins": ["AAVZZZ6RZCU042120"], "quotes": 3, "color": "#159bd7" },
+    { "id": "p5", "name": "Wheel Bearing", "category": "Bearing", "sku": "WB-RUNX-F", "price": 290, "stock": 6, "condition": "New", "supplier": "Tlokweng Auto Spares", "eta": "18 min", "engines": ["1NZ-5087742", "K7M-552010"], "vins": ["AHT53XEC104123456", "ADNUSN1D5U0124550"], "quotes": 5, "color": "#eb2333" },
+    { "id": "p6", "name": "Radiator", "category": "Cooling", "sku": "RAD-NP200-16", "price": 950, "stock": 3, "condition": "OEM", "supplier": "Mogoditshane Motors", "eta": "Today", "engines": ["K7M-552010"], "vins": ["ADNUSN1D5U0124550"], "quotes": 2, "color": "#159bd7" },
+    { "id": "p7", "name": "Alternator", "category": "Electrical", "sku": "ALT-1NZ-90A", "price": 1180, "stock": 2, "condition": "Used good", "supplier": "Tlokweng Auto Spares", "eta": "45 min", "engines": ["1NZ-5087742"], "vins": ["AHT53XEC104123456"], "quotes": 2, "color": "#20242a" },
+    { "id": "p8", "name": "Control Arm", "category": "Suspension", "sku": "CA-NP200-L", "price": 560, "stock": 7, "condition": "Aftermarket", "supplier": "Gaborone Parts Hub", "eta": "Today", "engines": ["K7M-552010"], "vins": ["ADNUSN1D5U0124550"], "quotes": 3, "color": "#eb2333" },
+    { "id": "p9", "name": "Front Bumper Clip Set", "category": "Body", "sku": "BC-RUNX-SET", "price": 120, "stock": 20, "condition": "New", "supplier": "Mogoditshane Motors", "eta": "20 min", "engines": ["1NZ-5087742"], "vins": ["AHT53XEC104123456"], "quotes": 1, "color": "#159bd7" }
+  ],
+  "quoteRequests": [
+    { "id": "qr1", "part": "Front Brake Pads", "vehicle": "Toyota RunX 1.5 2004", "channel": "App search", "status": "3 shop replies", "created": "1 min ago" },
+    { "id": "qr2", "part": "Wheel Bearing", "vehicle": "Toyota RunX 1.5 2004", "channel": "WhatsApp", "status": "Waiting approval", "created": "3 min ago" }
+  ],
+  "quoteReplies": [
+    { "id": "q1", "requestId": "qr1", "shop": "Tlokweng Auto Spares", "part": "Front Brake Pads", "price": 380, "eta": "15 min", "condition": "Aftermarket", "note": "In stock, delivery available." },
+    { "id": "q2", "requestId": "qr1", "shop": "Gaborone Parts Hub", "part": "Front Brake Pads", "price": 420, "eta": "25 min", "condition": "New", "note": "Premium ceramic option." },
+    { "id": "q3", "requestId": "qr1", "shop": "Mogoditshane Motors", "part": "Front Brake Pads", "price": 350, "eta": "Today", "condition": "Used good", "note": "Budget option, checked." }
+  ],
+  "schemaTables": [
+    ["profiles", "Customer, assistant, and admin profile records."],
+    ["vehicles", "Registered customer vehicles with make, model, and year."],
+    ["vehicle_identifiers", "VIN and engine number lookup records."],
+    ["part_categories", "Engine, Suspension, Brake, Bearing, and more."],
+    ["parts", "Catalog parts with images and descriptions."],
+    ["compatibility_links", "Links parts to VINs, engine numbers, and vehicle models."],
+    ["stock_items", "Quantity, price, condition, supplier, and SKU."],
+    ["quote_requests", "Customer quote requests from search or photo."],
+    ["quote_request_photos", "Uploaded unknown-part images."],
+    ["assistant_profiles", "Registered shop assistant WhatsApp profiles."],
+    ["assistant_quote_replies", "Shop offers for owner approval."],
+    ["carts", "Customer cart state."],
+    ["orders", "Checkout and fulfilment records."],
+    ["order_items", "Parts attached to each order."],
+    ["suppliers", "Shop and supplier data."],
+    ["social_leads", "Facebook, WhatsApp, and Marketplace lead intake."],
+    ["audit_events", "Owner/admin activity trail."],
+    ["app_intake_events", "Secure server-side intake for preview form submissions before full Auth."]
+  ],
+  "metrics": [
+    ["42", "searches today"],
+    ["9", "missing parts"],
+    ["1.8 min", "avg quote reply"],
+    ["BWP 18,450", "open order value"]
+  ]
+}
