@@ -857,6 +857,44 @@ async function handleApi(request, response, pathname) {
     return true;
   }
 
+  if (pathname === "/api/auth/refresh") {
+    const refreshToken = String(payload.refreshToken || "").trim();
+    if (!refreshToken) {
+      jsonError(response, 401, "Missing session refresh token.");
+      return true;
+    }
+
+    try {
+      const session = await supabaseAuthRequest("token?grant_type=refresh_token", {
+        method: "POST",
+        body: { refresh_token: refreshToken }
+      });
+      const user = session.user;
+      let profile = await getProfile(user.id);
+      if (!profile) {
+        profile = await upsertProfile({
+          userId: user.id,
+          role: user.app_metadata?.role || "customer",
+          fullName: user.user_metadata?.full_name || "",
+          phone: user.user_metadata?.phone || ""
+        });
+      }
+      await ensureAssistantProfile(profile);
+      jsonResponse(response, 200, {
+        session: {
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token,
+          expiresIn: session.expires_in
+        },
+        profile: cleanAuthProfile(profile, user),
+        message: "Session refreshed."
+      });
+    } catch (error) {
+      jsonError(response, 401, "Your saved login has expired. Please log in again.");
+    }
+    return true;
+  }
+
   if (pathname === "/api/auth/forgot-password") {
     const email = String(payload.email || "").trim().toLowerCase();
     if (!email || !email.includes("@")) {

@@ -17,6 +17,7 @@ let passwordRecoveryToken = '';
 let partsView = window.localStorage.getItem('speedy7.parts-view') === 'grid' ? 'grid' : 'list';
 
 const authStorageKey = 'speedy7.auth';
+const lastViewStorageKey = 'speedy7.last-view';
 
 let parts = [
   { id: 'p1', name: 'Engine Mount', category: 'Engine', sku: 'EM-1NZ-01', price: 650, stock: 8, condition: 'New', supplier: 'Tlokweng Auto Spares', eta: '15 min', engines: ['1NZ-5087742'], vins: ['AHT53XEC104123456'], quotes: 3, color: '#eb2333' },
@@ -98,7 +99,7 @@ async function apiRequest(path, payload) {
     return null;
   }
 }
-async function authRequest(path, payload) {
+async function authRequest(path, payload, options = {}) {
   try {
     const response = await fetch(path, {
       method: 'POST',
@@ -109,12 +110,15 @@ async function authRequest(path, payload) {
     if (!response.ok) throw new Error(data.error || 'Request failed');
     return data;
   } catch (error) {
-    toast(error.message || 'Authentication failed.');
+    if (!options.silent) toast(error.message || 'Authentication failed.');
     return null;
   }
 }
 function saveAuth(data) {
   authState = { session: data.session || authState.session, profile: data.profile || null };
+  if (authState.session && authState.profile) {
+    window.localStorage.setItem(authStorageKey, JSON.stringify(authState));
+  }
   updateAuthUi();
 }
 function clearAuth() {
@@ -125,6 +129,7 @@ function clearAuth() {
   orders = [];
   selectedVehicleId = null;
   window.localStorage.removeItem(authStorageKey);
+  window.localStorage.removeItem(lastViewStorageKey);
   window.sessionStorage.removeItem(authStorageKey);
   updateAuthUi();
 }
@@ -179,18 +184,32 @@ async function logoutCurrentUser() {
 async function restoreAuth() {
   try {
     const stored = JSON.parse(window.localStorage.getItem(authStorageKey) || window.sessionStorage.getItem(authStorageKey) || 'null');
-    window.localStorage.removeItem(authStorageKey);
     window.sessionStorage.removeItem(authStorageKey);
-    if (stored?.session?.accessToken) {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: stored.session.accessToken })
-      });
+    if (!stored?.session?.accessToken) return false;
+
+    const current = await authRequest('/api/auth/me', {
+      accessToken: stored.session.accessToken
+    }, { silent: true });
+    if (current?.profile) {
+      saveAuth({ session: stored.session, profile: current.profile });
+      return true;
     }
-    authState = { session: null, profile: null };
+
+    if (stored.session.refreshToken) {
+      const refreshed = await authRequest('/api/auth/refresh', {
+        refreshToken: stored.session.refreshToken
+      }, { silent: true });
+      if (refreshed?.profile) {
+        saveAuth(refreshed);
+        return true;
+      }
+    }
+
+    clearAuth();
+    return false;
   } catch (error) {
-    authState = { session: null, profile: null };
+    clearAuth();
+    return false;
   }
 }
 function updateAuthControls() {
@@ -325,12 +344,14 @@ async function loadConnectionStatus() {
   element.textContent = 'Local mode - Supabase not connected';
 }
 function showView(viewId) {
+  if (!document.getElementById(viewId)?.classList.contains('view')) viewId = 'customerView';
   if (!canAccessView(viewId)) {
     toast(viewId === 'adminView' ? 'Admin login required.' : 'Shop assistant login required.');
     viewId = 'customerView';
   }
   document.querySelectorAll('.view').forEach(view => view.classList.toggle('is-visible', view.id === viewId));
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('is-active', item.dataset.view === viewId));
+  if (authState.profile) window.localStorage.setItem(lastViewStorageKey, viewId);
 }
 function partSvg(part) {
   const label = part.category.slice(0, 2).toUpperCase();
@@ -726,11 +747,16 @@ function renderAll() {
 }
 async function startApp() {
   await loadBackendData();
-  await restoreAuth();
+  const restored = await restoreAuth();
+  if (restored) await loadAccountData();
   await loadConnectionStatus();
   initEvents();
   renderAll();
   updateAuthUi();
+  if (restored) {
+    document.body.classList.remove('mobile-splash-active');
+    showView(window.localStorage.getItem(lastViewStorageKey) || 'customerView');
+  }
   openRecoveryLink();
 }
 startApp();
