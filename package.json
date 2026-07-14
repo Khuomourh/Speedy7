@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "speedy7-preview",
   "version": "1.0.0",
   "private": true,
@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check": "node --check app.js && node --check server.js"
+    "check": "node --check app.js && node --check server.js && node --check api/index.js && node --check service-worker.js",
+    "import:parts": "node scripts/import-parts.js"
   },
   "keywords": [
     "speedy7",
@@ -14,5 +15,8 @@
     "quotes",
     "supabase"
   ],
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
 }

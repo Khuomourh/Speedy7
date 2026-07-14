@@ -1,0 +1,29 @@
+{
+  "name": "Speedy7 Parts Finder",
+  "short_name": "Speedy7",
+  "description": "Find compatible car parts, request shop quotes, and track orders.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#eb2333",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/assets/speedy7-logo.png",
+      "sizes": "206x206",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search parts",
+      "url": "/#customerView"
+    },
+    {
+      "name": "My quotes",
+      "url": "/#quotesView"
+    }
+  ]
+}

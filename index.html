@@ -3,42 +3,104 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#eb2333">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Speedy7">
     <title>Speedy7 Parts Finder</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="assets/speedy7-logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="assets/speedy7-logo.png">
+    <link rel="stylesheet" href="styles.css?v=6">
   </head>
-  <body>
+  <body class="mobile-auth-pending mobile-splash-active">
+    <section id="mobileSplash" class="mobile-splash" aria-label="Open Speedy7">
+      <button id="splashEnterBtn" class="splash-logo-button" type="button" aria-label="Open Speedy7">
+        <img src="assets/speedy7-logo.png" alt="Speedy7">
+      </button>
+      <div class="splash-footer" aria-hidden="true">
+        <strong>Speedy7</strong>
+        <span>Parts. Quotes. Delivery.</span>
+      </div>
+    </section>
+
+    <section id="mobileAuthGate" class="mobile-auth-gate" aria-labelledby="mobileAuthTitle">
+      <div class="mobile-auth-intro">
+        <img src="assets/speedy7-logo.png" alt="Speedy7">
+        <div>
+          <p class="eyebrow">Parts without the runaround</p>
+          <h1>Find the right part for your car.</h1>
+          <p>Register once, save your vehicle, and request quotes from nearby parts shops.</p>
+        </div>
+        <div class="mobile-auth-benefits" aria-label="Speedy7 benefits">
+          <span>Engine and VIN matching</span>
+          <span>Fast shop quotes</span>
+        </div>
+      </div>
+
+      <div class="mobile-auth-panel">
+        <div class="mobile-auth-heading">
+          <p class="eyebrow">Welcome to Speedy7</p>
+          <h2 id="mobileAuthTitle">Create your account</h2>
+        </div>
+        <div class="mobile-auth-tabs" role="tablist" aria-label="Account action">
+          <button id="mobileSignupTab" class="is-active" data-mobile-auth-mode="signup" type="button" role="tab" aria-selected="true">Create account</button>
+          <button id="mobileLoginTab" data-mobile-auth-mode="login" type="button" role="tab" aria-selected="false">Log in</button>
+        </div>
+        <form id="mobileAuthForm" class="mobile-auth-form">
+          <label id="mobileFullNameLabel">Full name<input id="mobileFullName" type="text" placeholder="Your full name" autocomplete="name" required></label>
+          <label id="mobilePhoneLabel">Mobile number<input id="mobilePhone" type="tel" placeholder="+267 71 000 000" autocomplete="tel" required></label>
+          <label id="mobileRoleLabel">Register as
+            <select id="mobileRole" required>
+              <option value="customer">Customer</option>
+              <option value="assistant">Shop assistant</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <label id="mobileAdminInviteLabel" hidden>Admin invite code<input id="mobileAdminInvite" type="password" placeholder="Private owner code" autocomplete="off"></label>
+          <label>Email address<input id="mobileEmail" type="email" placeholder="you@example.com" autocomplete="email" required></label>
+          <label>Password<input id="mobilePassword" type="password" placeholder="At least 6 characters" autocomplete="new-password" minlength="6" required></label>
+          <button id="mobileAuthSubmit" class="primary-btn mobile-auth-submit" type="submit">Create account</button>
+          <p id="mobileAuthHint" class="mobile-auth-hint">Your vehicle details will be saved to your Speedy7 account.</p>
+        </form>
+      </div>
+    </section>
+
     <div class="app-shell">
       <aside class="sidebar" aria-label="Speedy7 navigation">
-        <a class="brand" href="#customerView" aria-label="Speedy7 home">
-          <img class="brand-logo" src="assets/speedy7-logo.png" alt="Speedy7 logo">
-          <span class="brand-fallback" aria-hidden="true">
-            <span class="speed-mark"><i></i><b></b><em></em></span>
-            <span><strong>speedy7</strong><small>Speed & Time</small></span>
-          </span>
-        </a>
+        <div class="mobile-header">
+          <a class="brand" href="#customerView" aria-label="Speedy7 home">
+            <img class="brand-logo" src="assets/speedy7-logo.png" alt="Speedy7 logo">
+            <span class="brand-fallback" aria-hidden="true">
+              <span class="speed-mark"><i></i><b></b><em></em></span>
+              <span><strong>speedy7</strong><small>Speed & Time</small></span>
+            </span>
+          </a>
+          <button id="mobileAccountBtn" class="mobile-account-btn" type="button">Account</button>
+        </div>
 
         <nav class="nav-list" aria-label="Main views">
-          <button class="nav-item is-active" data-view="customerView" type="button"><span>01</span>Search Parts</button>
-          <button class="nav-item" data-view="garageView" type="button"><span>02</span>My Garage</button>
-          <button class="nav-item" data-view="quotesView" type="button"><span>03</span>Quotes</button>
-          <button class="nav-item" data-view="ordersView" type="button"><span>04</span>Orders</button>
-          <button class="nav-item" data-view="assistantView" type="button"><span>05</span>Shop Assistant</button>
-          <button class="nav-item" data-view="adminView" type="button"><span>06</span>Admin Database</button>
+          <button class="nav-item is-active" data-view="customerView" type="button"><span>01</span><b>Search</b></button>
+          <button class="nav-item" data-view="garageView" type="button"><span>02</span><b>Garage</b></button>
+          <button class="nav-item" data-view="quotesView" type="button"><span>03</span><b>Quotes</b></button>
+          <button class="nav-item" data-view="ordersView" type="button"><span>04</span><b>Orders</b></button>
+          <button class="nav-item" data-view="assistantView" type="button"><span>05</span><b>Assistant</b></button>
+          <button class="nav-item" data-view="adminView" type="button"><span>06</span><b>Admin</b></button>
         </nav>
 
         <section class="login-card" aria-labelledby="loginTitle">
           <p class="eyebrow">Account</p>
-          <h2 id="loginTitle">Login preview</h2>
+          <h2 id="loginTitle">Your account</h2>
           <form id="loginForm" class="stacked-form">
-            <label>Action<select id="authModeSelect"><option value="login">Log in</option><option value="signup">Create account</option></select></label>
-            <label>Email<input id="loginEmail" type="email" value="customer@speedy7.co.bw" autocomplete="username"></label>
-            <label>Password<input id="loginPassword" type="password" value="speedy7" autocomplete="current-password"></label>
-            <label id="fullNameLabel" hidden>Full name<input id="fullNameInput" type="text" value="Khuomourh Ikanyeng" autocomplete="name"></label>
-            <label id="phoneLabel" hidden>Phone<input id="phoneInput" type="tel" value="+267 71 000 000" autocomplete="tel"></label>
+            <label>Action<select id="authModeSelect"><option value="signup" selected>Create account</option><option value="login">Log in</option></select></label>
+            <label>Email<input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="username"></label>
+            <label>Password<input id="loginPassword" type="password" placeholder="At least 6 characters" autocomplete="new-password"></label>
+            <label id="fullNameLabel">Full name<input id="fullNameInput" type="text" placeholder="Your full name" autocomplete="name"></label>
+            <label id="phoneLabel">Phone<input id="phoneInput" type="tel" placeholder="+267 71 000 000" autocomplete="tel"></label>
             <label>Role<select id="roleSelect"><option value="customer">Customer</option><option value="assistant">Shop assistant</option><option value="admin">Admin</option></select></label>
             <label id="adminInviteLabel" hidden>Admin invite code<input id="adminInviteInput" type="password" autocomplete="off"></label>
             <div class="auth-actions">
-              <button class="primary-btn" id="authSubmitBtn" type="submit">Log in</button>
+              <button class="primary-btn" id="authSubmitBtn" type="submit">Create account</button>
               <button class="ghost-btn" id="logoutBtn" type="button" hidden>Log out</button>
             </div>
           </form>
@@ -68,8 +130,8 @@
           <div class="hero-panel">
             <div class="hero-copy">
               <p class="eyebrow">Customer search</p>
-              <h2 id="customerTitle">Use engine number today, collect VIN for smarter matching tomorrow.</h2>
-              <p>Register a car once. Speedy7 links compatible parts, shop offers, quote replies, orders, and delivery options to that vehicle.</p>
+              <h2 id="customerTitle">Tell us about your car.</h2>
+              <p>Start with the engine number. Add the VIN when available for more exact parts matching.</p>
             </div>
             <form id="carForm" class="car-form">
               <label>VIN<input id="vinInput" type="text" placeholder="Optional now, useful later"></label>
@@ -94,7 +156,16 @@
               <div id="categoryTabs" class="category-list" role="tablist" aria-label="Part categories"></div>
             </section>
             <section class="panel parts-panel" aria-labelledby="partsTitle">
-              <div class="panel-head"><div><p class="eyebrow">Matched catalog</p><h2 id="partsTitle">Compatible parts</h2></div><button class="ghost-btn compact" id="resetFiltersBtn" type="button">Reset</button></div>
+              <div class="panel-head">
+                <div><p class="eyebrow">Matched catalog</p><h2 id="partsTitle">Compatible parts</h2></div>
+                <div class="parts-panel-tools">
+                  <div class="parts-view-toggle" role="group" aria-label="Parts display">
+                    <button id="partsListViewBtn" class="is-active" data-parts-view="list" type="button" aria-pressed="true">List</button>
+                    <button id="partsGridViewBtn" data-parts-view="grid" type="button" aria-pressed="false">Grid</button>
+                  </div>
+                  <button class="ghost-btn compact" id="resetFiltersBtn" type="button">Reset</button>
+                </div>
+              </div>
               <div id="partsList" class="parts-list"></div>
             </section>
           </div>
@@ -205,7 +276,42 @@ Wheel Bearing,Bearing,WB-RUNX-F,290,6,AHT53XEC104123456,1NZ-5087742</textarea></
         </section>
       </main>
     </div>
+    <div id="mobileAccountSheet" class="mobile-account-sheet" hidden>
+      <button id="mobileAccountBackdrop" class="mobile-sheet-backdrop" type="button" aria-label="Close account menu"></button>
+      <section class="mobile-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="mobileAccountTitle">
+        <div class="mobile-sheet-head">
+          <div>
+            <p class="eyebrow">Signed in</p>
+            <h2 id="mobileAccountTitle">Your account</h2>
+          </div>
+          <button id="mobileAccountClose" class="icon-btn" type="button" aria-label="Close account menu">&times;</button>
+        </div>
+        <div class="mobile-account-profile">
+          <strong id="mobileAccountName">Speedy7 customer</strong>
+          <span id="mobileAccountMeta"></span>
+        </div>
+        <div class="mobile-account-actions">
+          <button id="mobileAssistantBtn" class="ghost-btn" type="button" hidden>Shop assistant tools</button>
+          <button id="mobileAdminBtn" class="ghost-btn" type="button" hidden>Admin tools</button>
+          <button id="mobileLogoutBtn" class="primary-btn" type="button">Log out</button>
+        </div>
+      </section>
+    </div>
+    <div id="partZoomModal" class="part-zoom-modal" hidden>
+      <button id="partZoomBackdrop" class="part-zoom-backdrop" type="button" aria-label="Close part image"></button>
+      <section class="part-zoom-panel" role="dialog" aria-modal="true" aria-labelledby="partZoomTitle">
+        <div class="part-zoom-head">
+          <div>
+            <p class="eyebrow">Part image</p>
+            <h2 id="partZoomTitle">Part</h2>
+          </div>
+          <button id="partZoomClose" class="icon-btn" type="button" aria-label="Close part image">&times;</button>
+        </div>
+        <div id="partZoomArtwork" class="part-zoom-artwork"></div>
+        <p id="partZoomDetails" class="part-zoom-details"></p>
+      </section>
+    </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js"></script>
+    <script src="app.js?v=6"></script>
   </body>
 </html>

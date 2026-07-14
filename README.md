@@ -7,7 +7,17 @@ Speedy7 is a running car-parts search and quote app for customers, shop assistan
 1. Open this folder in VS Code: `D:\Speedy7`.
 2. Open the VS Code terminal.
 3. Run `node server.js`.
-4. Open `http://127.0.0.1:5177/` in your browser.
+4. Open `http://127.0.0.1:5177/` in your computer browser.
+
+## Connect an Android phone
+
+1. Connect the computer and Android phone to the same Wi-Fi network.
+2. Start Speedy7 with `npm.cmd start`.
+3. Look for the terminal line labelled `Android phone (same Wi-Fi)`.
+4. Enter that full address in Chrome on the Android phone.
+5. If Windows asks about Node.js network access, allow **Private networks**.
+
+The local phone address works while the Speedy7 computer is switched on and the server is running. A public HTTPS deployment is required for access away from the Wi-Fi network and full Android home-screen installation.
 
 You can also press `Ctrl+Shift+B` in VS Code and choose **Run Speedy7 App**.
 
@@ -56,7 +66,7 @@ SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ADMIN_INVITE_CODE=
 PORT=5177
-HOST=127.0.0.1
+HOST=0.0.0.0
 ```
 
 Keep `SUPABASE_SERVICE_ROLE_KEY` on the server only. Do not paste it into browser code.

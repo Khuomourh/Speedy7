@@ -1,16 +1,19 @@
-const http = require("http");
+﻿const http = require("http");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
 const root = __dirname;
 const dataDir = path.join(root, "data");
 const seedPath = path.join(dataDir, "seed.json");
-const statePath = path.join(dataDir, "local-state.json");
+const statePath = process.env.VERCEL
+  ? path.join(os.tmpdir(), "speedy7-local-state.json")
+  : path.join(dataDir, "local-state.json");
 
 loadEnvFile(path.join(root, ".env"));
 
 const port = Number(process.env.PORT || 5177);
-const host = process.env.HOST || "127.0.0.1";
+const host = process.env.HOST || "0.0.0.0";
 const supabaseUrl = trimTrailingSlash(process.env.SUPABASE_URL || "");
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "";
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -21,6 +24,7 @@ const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -48,6 +52,13 @@ function loadEnvFile(filePath) {
 
 function trimTrailingSlash(value) {
   return value.replace(/\/+$/, "");
+}
+
+function localNetworkUrls(serverPort) {
+  return Object.values(os.networkInterfaces())
+    .flatMap(addresses => addresses || [])
+    .filter(address => address.family === "IPv4" && !address.internal)
+    .map(address => `http://${address.address}:${serverPort}/`);
 }
 
 function supabaseConnectionInfo() {
@@ -175,6 +186,7 @@ async function loadSupabaseCatalog() {
       return {
         id: part.id,
         name: part.name,
+        image: part.image_url || "",
         category,
         sku: stock.sku || "SP7-LIVE",
         price: Number(stock.price || 0),
@@ -249,6 +261,19 @@ function jsonError(response, statusCode, message, details) {
 }
 
 function readBody(request) {
+  if (request.body !== undefined && request.body !== null) {
+    if (typeof request.body === "object" && !Buffer.isBuffer(request.body)) {
+      return Promise.resolve(request.body);
+    }
+
+    try {
+      const body = Buffer.isBuffer(request.body) ? request.body.toString("utf8") : String(request.body);
+      return Promise.resolve(body ? JSON.parse(body) : {});
+    } catch (error) {
+      return Promise.reject(new Error("Invalid JSON request body"));
+    }
+  }
+
   return new Promise((resolve, reject) => {
     let body = "";
     request.on("data", chunk => {
@@ -494,10 +519,15 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "GET" && pathname === "/api/bootstrap") {
     const catalog = await loadSupabaseCatalog();
+    const catalogParts = catalog?.parts || seed.parts || [];
 
     jsonResponse(response, 200, {
       ...seed,
       ...(catalog || {}),
+      parts: catalogParts.map(part => ({
+        ...part,
+        image: part.image || part.image_url || ""
+      })),
       garage: state.garage.length ? state.garage : [seed.vehicles?.[0]].filter(Boolean),
       quoteRequests: [...state.quoteRequests, ...(seed.quoteRequests || [])],
       quoteReplies: [...state.quoteReplies, ...(seed.quoteReplies || [])],
@@ -725,6 +755,7 @@ function createServer() {
         const extension = path.extname(filePath).toLowerCase();
         response.writeHead(200, {
           "Content-Type": mimeTypes[extension] || "application/octet-stream",
+          "Cache-Control": "no-store",
           "X-Content-Type-Options": "nosniff"
         });
         response.end(content);
@@ -735,11 +766,16 @@ function createServer() {
   });
 }
 
-const server = createServer();
-
 if (require.main === module) {
+  const server = createServer();
   server.listen(port, host, () => {
-    console.log(`Speedy7 is running at http://${host}:${port}/`);
+    const computerHost = host === "0.0.0.0" ? "127.0.0.1" : host;
+    console.log(`Speedy7 is running at http://${computerHost}:${port}/`);
+    if (host === "0.0.0.0") {
+      for (const url of localNetworkUrls(port)) {
+        console.log(`Android phone (same Wi-Fi): ${url}`);
+      }
+    }
     console.log("Local API is ready at /api/bootstrap and /api/health.");
     console.log("Press Ctrl+C to stop the app.");
   });

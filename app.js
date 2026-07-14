@@ -1,4 +1,4 @@
-let categories = ['All', 'Engine', 'Suspension', 'Brake', 'Bearing', 'Electrical', 'Cooling', 'Body', 'Service'];
+﻿let categories = ['All', 'Engine', 'Suspension', 'Brake', 'Bearing', 'Electrical', 'Cooling', 'Body', 'Service'];
 let vehicles = [
   { id: 'veh-1', vin: 'AHT53XEC104123456', engine: '1NZ-5087742', label: 'Toyota RunX 1.5 2004', make: 'Toyota', model: 'RunX', year: '2004' },
   { id: 'veh-2', vin: 'AAVZZZ6RZCU042120', engine: 'CLP-884201', label: 'VW Polo 1.4 2012', make: 'Volkswagen', model: 'Polo', year: '2012' },
@@ -12,6 +12,8 @@ let selectedRequest = null;
 let orders = [];
 let backendAvailable = false;
 let authState = { session: null, profile: null };
+let mobileAuthMode = 'signup';
+let partsView = window.localStorage.getItem('speedy7.parts-view') === 'grid' ? 'grid' : 'list';
 
 const authStorageKey = 'speedy7.auth';
 
@@ -109,24 +111,45 @@ async function authRequest(path, payload) {
 }
 function saveAuth(data) {
   authState = { session: data.session || authState.session, profile: data.profile || null };
-  window.localStorage.setItem(authStorageKey, JSON.stringify(authState));
   updateAuthUi();
 }
 function clearAuth() {
   authState = { session: null, profile: null };
   window.localStorage.removeItem(authStorageKey);
+  window.sessionStorage.removeItem(authStorageKey);
   updateAuthUi();
+}
+function openMobileAccount() {
+  if (!authState.profile) return;
+  $('mobileAccountSheet').hidden = false;
+  document.body.classList.add('mobile-sheet-open');
+}
+function closeMobileAccount() {
+  if ($('mobileAccountSheet')) $('mobileAccountSheet').hidden = true;
+  document.body.classList.remove('mobile-sheet-open');
+}
+async function logoutCurrentUser() {
+  await authRequest('/api/auth/logout', { accessToken: authState.session?.accessToken });
+  closeMobileAccount();
+  clearAuth();
+  showView('customerView');
+  toast('Logged out. Create an account or log in to continue.');
 }
 async function restoreAuth() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(authStorageKey) || 'null');
-    if (!stored?.session?.accessToken) return;
-    authState = stored;
-    const data = await authRequest('/api/auth/me', { accessToken: stored.session.accessToken });
-    if (data?.profile) saveAuth({ session: stored.session, profile: data.profile });
-    else clearAuth();
+    const stored = JSON.parse(window.localStorage.getItem(authStorageKey) || window.sessionStorage.getItem(authStorageKey) || 'null');
+    window.localStorage.removeItem(authStorageKey);
+    window.sessionStorage.removeItem(authStorageKey);
+    if (stored?.session?.accessToken) {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: stored.session.accessToken })
+      });
+    }
+    authState = { session: null, profile: null };
   } catch (error) {
-    clearAuth();
+    authState = { session: null, profile: null };
   }
 }
 function updateAuthControls() {
@@ -136,16 +159,61 @@ function updateAuthControls() {
   if ($('phoneLabel')) $('phoneLabel').hidden = !isSignup;
   if ($('adminInviteLabel')) $('adminInviteLabel').hidden = !(isSignup && role === 'admin');
   if ($('authSubmitBtn')) $('authSubmitBtn').textContent = isSignup ? 'Create account' : 'Log in';
+  if ($('loginPassword')) $('loginPassword').autocomplete = isSignup ? 'new-password' : 'current-password';
+}
+function setMobileAuthMode(mode) {
+  mobileAuthMode = mode === 'login' ? 'login' : 'signup';
+  const isSignup = mobileAuthMode === 'signup';
+  const selectedRole = $('mobileRole')?.value || 'customer';
+  if ($('mobileFullNameLabel')) $('mobileFullNameLabel').hidden = !isSignup;
+  if ($('mobilePhoneLabel')) $('mobilePhoneLabel').hidden = !isSignup;
+  if ($('mobileRoleLabel')) $('mobileRoleLabel').hidden = !isSignup;
+  if ($('mobileAdminInviteLabel')) $('mobileAdminInviteLabel').hidden = !(isSignup && selectedRole === 'admin');
+  if ($('mobileFullName')) $('mobileFullName').required = isSignup;
+  if ($('mobilePhone')) $('mobilePhone').required = isSignup;
+  if ($('mobileRole')) $('mobileRole').required = isSignup;
+  if ($('mobileAdminInvite')) $('mobileAdminInvite').required = isSignup && selectedRole === 'admin';
+  if ($('mobilePassword')) $('mobilePassword').autocomplete = isSignup ? 'new-password' : 'current-password';
+  if ($('mobileAuthTitle')) $('mobileAuthTitle').textContent = isSignup ? 'Create your account' : 'Welcome back';
+  if ($('mobileAuthSubmit')) $('mobileAuthSubmit').textContent = isSignup ? 'Create account' : 'Log in';
+  if ($('mobileAuthHint')) $('mobileAuthHint').textContent = isSignup
+    ? 'Your vehicle details will be saved to your Speedy7 account.'
+    : 'Log in to continue with your saved vehicles, quotes, and orders.';
+  document.querySelectorAll('[data-mobile-auth-mode]').forEach(button => {
+    const isActive = button.dataset.mobileAuthMode === mobileAuthMode;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-selected', String(isActive));
+  });
+}
+function updateNavigationForRole(role) {
+  document.querySelectorAll('.nav-item').forEach(button => {
+    const viewId = button.dataset.view;
+    const restricted = viewId === 'assistantView' || viewId === 'adminView';
+    if (!role || role === 'admin' || !restricted) {
+      button.hidden = false;
+      return;
+    }
+    button.hidden = viewId === 'adminView' || (viewId === 'assistantView' && role !== 'assistant');
+  });
 }
 function updateAuthUi() {
   const profile = authState.profile;
+  document.body.classList.remove('mobile-auth-pending');
+  document.body.classList.toggle('mobile-auth-required', !profile);
+  updateNavigationForRole(profile?.role);
+  setMobileAuthMode(mobileAuthMode);
   if ($('logoutBtn')) $('logoutBtn').hidden = !profile;
   if (!profile) {
+    closeMobileAccount();
     if ($('loginStatus')) $('loginStatus').textContent = 'Guest browsing';
     updateAuthControls();
     return;
   }
 
+  if ($('mobileAccountName')) $('mobileAccountName').textContent = profile.fullName || profile.email || 'Speedy7 customer';
+  if ($('mobileAccountMeta')) $('mobileAccountMeta').textContent = roleLabel(profile.role) + (profile.email ? ' - ' + profile.email : '');
+  if ($('mobileAssistantBtn')) $('mobileAssistantBtn').hidden = !['assistant', 'admin'].includes(profile.role);
+  if ($('mobileAdminBtn')) $('mobileAdminBtn').hidden = profile.role !== 'admin';
   if ($('loginStatus')) $('loginStatus').textContent = roleLabel(profile.role) + ' logged in';
   if ($('loginEmail')) $('loginEmail').value = profile.email || $('loginEmail').value;
   if ($('roleSelect')) $('roleSelect').value = profile.role || 'customer';
@@ -157,6 +225,11 @@ function canAccessView(viewId) {
   if (viewId === 'adminView') return false;
   if (viewId === 'assistantView') return role === 'assistant';
   return true;
+}
+function showProfileHome(profile) {
+  if (profile?.role === 'assistant') showView('assistantView');
+  else if (profile?.role === 'admin') showView('adminView');
+  else showView('customerView');
 }
 async function loadBackendData() {
   const data = await apiRequest('/api/bootstrap');
@@ -207,6 +280,44 @@ function partSvg(part) {
   const label = part.category.slice(0, 2).toUpperCase();
   return '<svg viewBox="0 0 160 150" role="img" aria-label="' + part.name + '"><rect width="160" height="150" rx="12" fill="#eef3f8"/><circle cx="80" cy="72" r="42" fill="' + part.color + '" opacity="0.16"/><path d="M38 92h84l-13 19H51z" fill="#20242a" opacity="0.85"/><path d="M51 52h58l19 35H32z" fill="' + part.color + '"/><circle cx="56" cy="102" r="10" fill="#fff"/><circle cx="104" cy="102" r="10" fill="#fff"/><text x="80" y="79" text-anchor="middle" fill="#fff" font-size="24" font-family="Arial" font-weight="700">' + label + '</text></svg>';
 }
+function escapeAttribute(value) {
+  return String(value || '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[character]));
+}
+function partVisual(part) {
+  if (part.image) {
+    return '<img src="' + escapeAttribute(part.image) + '" alt="' + escapeAttribute(part.name) + '" loading="lazy">';
+  }
+  return partSvg(part);
+}
+function setPartsView(view) {
+  partsView = view === 'grid' ? 'grid' : 'list';
+  window.localStorage.setItem('speedy7.parts-view', partsView);
+  if ($('partsList')) $('partsList').classList.toggle('is-grid', partsView === 'grid');
+  document.querySelectorAll('[data-parts-view]').forEach(button => {
+    const isActive = button.dataset.partsView === partsView;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-pressed', String(isActive));
+  });
+}
+function openPartZoom(partId) {
+  const part = parts.find(item => item.id === partId);
+  if (!part) return;
+  $('partZoomTitle').textContent = part.name;
+  $('partZoomArtwork').innerHTML = partVisual(part);
+  $('partZoomDetails').textContent = part.category + ' - ' + part.condition + ' - ' + money(part.price);
+  $('partZoomModal').hidden = false;
+  document.body.classList.add('part-zoom-open');
+}
+function closePartZoom() {
+  $('partZoomModal').hidden = true;
+  document.body.classList.remove('part-zoom-open');
+}
 function matchesVehicle(part, vehicle) {
   if (!vehicle) return true;
   return part.engines.includes(vehicle.engine) || part.vins.includes(vehicle.vin) || part.name.toLowerCase().includes(($('searchInput').value || '').toLowerCase());
@@ -228,7 +339,8 @@ function renderParts() {
   const list = filteredParts();
   $('linkedPartsCount').textContent = list.length;
   $('quoteCount').textContent = quoteReplies.length;
-  $('partsList').innerHTML = list.length ? list.map(part => '<article class="part-card"><div class="part-art">' + partSvg(part) + '</div><div><h3>' + part.name + '</h3><div class="price-row"><strong>' + money(part.price) + '</strong><span>estimate</span></div><div class="part-meta"><span>' + part.category + '</span><span>' + part.condition + '</span><span>' + part.stock + ' in stock</span><span>' + part.quotes + ' quotes</span></div><p class="plain-copy">Fits ' + part.engines.join(', ') + '. Supplier: ' + part.supplier + '. ETA ' + part.eta + '.</p><div class="part-actions"><button class="ghost-btn compact" data-action="quote" data-id="' + part.id + '" type="button">Get quote</button><button class="ghost-btn compact" data-action="cart" data-id="' + part.id + '" type="button">Add to order</button><button class="primary-btn compact" data-action="buy" data-id="' + part.id + '" type="button">Buy now</button></div></div></article>').join('') : '<p class="plain-copy">No matching parts yet. Send a photo quote so the owner can add it to the database.</p>';
+  $('partsList').innerHTML = list.length ? list.map(part => '<article class="part-card"><button class="part-art" data-zoom-part="' + part.id + '" type="button" aria-label="View larger image of ' + escapeAttribute(part.name) + '">' + partVisual(part) + '<span class="part-zoom-hint">View</span></button><div class="part-info"><h3>' + part.name + '</h3><div class="price-row"><strong>' + money(part.price) + '</strong><span>estimate</span></div><div class="part-meta"><span>' + part.category + '</span><span>' + part.condition + '</span><span>' + part.stock + ' in stock</span><span>' + part.quotes + ' quotes</span></div><p class="plain-copy">Fits ' + part.engines.join(', ') + '. Supplier: ' + part.supplier + '. ETA ' + part.eta + '.</p><div class="part-actions"><button class="ghost-btn compact" data-action="quote" data-id="' + part.id + '" type="button">Get quote</button><button class="ghost-btn compact" data-action="cart" data-id="' + part.id + '" type="button">Add to order</button><button class="primary-btn compact" data-action="buy" data-id="' + part.id + '" type="button">Buy now</button></div></div></article>').join('') : '<p class="plain-copy">No matching parts yet. Send a photo quote so the owner can add it to the database.</p>';
+  setPartsView(partsView);
   renderAdminPartSelect();
 }
 function renderGarage() {
@@ -258,7 +370,58 @@ function addToCart(part) {
   toast(part.name + ' added to order.');
 }
 function initEvents() {
+  $('splashEnterBtn').addEventListener('click', () => {
+    document.body.classList.remove('mobile-splash-active');
+    $('mobileAuthGate').scrollTop = 0;
+  });
   document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => showView(item.dataset.view)));
+  document.querySelectorAll('[data-parts-view]').forEach(button => {
+    button.addEventListener('click', () => setPartsView(button.dataset.partsView));
+  });
+  $('partZoomBackdrop').addEventListener('click', closePartZoom);
+  $('partZoomClose').addEventListener('click', closePartZoom);
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !$('partZoomModal').hidden) closePartZoom();
+  });
+  $('mobileAccountBtn').addEventListener('click', openMobileAccount);
+  $('mobileAccountBackdrop').addEventListener('click', closeMobileAccount);
+  $('mobileAccountClose').addEventListener('click', closeMobileAccount);
+  $('mobileLogoutBtn').addEventListener('click', logoutCurrentUser);
+  $('mobileAssistantBtn').addEventListener('click', () => {
+    closeMobileAccount();
+    showView('assistantView');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  $('mobileAdminBtn').addEventListener('click', () => {
+    closeMobileAccount();
+    showView('adminView');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  document.querySelectorAll('[data-mobile-auth-mode]').forEach(button => {
+    button.addEventListener('click', () => setMobileAuthMode(button.dataset.mobileAuthMode));
+  });
+  $('mobileRole').addEventListener('change', () => setMobileAuthMode(mobileAuthMode));
+  $('mobileAuthForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const submitButton = $('mobileAuthSubmit');
+    submitButton.disabled = true;
+    submitButton.textContent = mobileAuthMode === 'signup' ? 'Creating account...' : 'Logging in...';
+    const data = await authRequest('/api/auth/' + mobileAuthMode, {
+      email: $('mobileEmail').value.trim(),
+      password: $('mobilePassword').value,
+      fullName: $('mobileFullName').value.trim(),
+      phone: $('mobilePhone').value.trim(),
+      role: mobileAuthMode === 'signup' ? $('mobileRole').value : 'customer',
+      adminInviteCode: $('mobileAdminInvite').value
+    });
+    submitButton.disabled = false;
+    setMobileAuthMode(mobileAuthMode);
+    if (!data?.profile) return;
+    saveAuth(data);
+    showProfileHome(data.profile);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast(data.message || 'Welcome to Speedy7.');
+  });
   $('authModeSelect').addEventListener('change', updateAuthControls);
   $('roleSelect').addEventListener('change', updateAuthControls);
   $('loginForm').addEventListener('submit', async event => {
@@ -275,17 +438,10 @@ function initEvents() {
     });
     if (!data?.profile) return;
     saveAuth(data);
-    if (data.profile.role === 'assistant') showView('assistantView');
-    else if (data.profile.role === 'admin') showView('adminView');
-    else showView('customerView');
+    showProfileHome(data.profile);
     toast(data.message || 'Logged in.');
   });
-  $('logoutBtn').addEventListener('click', async () => {
-    await authRequest('/api/auth/logout', { accessToken: authState.session?.accessToken });
-    clearAuth();
-    showView('customerView');
-    toast('Logged out.');
-  });
+  $('logoutBtn').addEventListener('click', logoutCurrentUser);
   $('carForm').addEventListener('submit', event => {
     event.preventDefault();
     const label = $('vehicleInput').value.trim() || 'Vehicle pending details';
@@ -308,6 +464,11 @@ function initEvents() {
     renderParts();
   });
   $('partsList').addEventListener('click', event => {
+    const zoomButton = event.target.closest('[data-zoom-part]');
+    if (zoomButton) {
+      openPartZoom(zoomButton.dataset.zoomPart);
+      return;
+    }
     const button = event.target.closest('[data-action]');
     if (!button) return;
     const part = parts.find(item => item.id === button.dataset.id);
@@ -438,3 +599,11 @@ async function startApp() {
   updateAuthUi();
 }
 startApp();
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(error => {
+      console.warn('Speedy7 offline support is unavailable:', error.message);
+    });
+  });
+}

@@ -5,6 +5,7 @@ Thumbs.db
 *.log
 
 data/local-state.json
+data/parts-database/
 data/*.db
 data/*.sqlite
 .env
