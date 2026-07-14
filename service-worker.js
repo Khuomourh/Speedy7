@@ -1,9 +1,9 @@
-const CACHE_NAME = 'speedy7-shell-v6';
+const CACHE_NAME = 'speedy7-shell-v7';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=6',
-  '/app.js?v=6',
+  '/styles.css?v=7',
+  '/app.js?v=7',
   '/manifest.webmanifest',
   '/assets/speedy7-logo.png',
   '/assets/speedy7-splash-engine.jpg'

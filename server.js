@@ -188,6 +188,7 @@ async function loadSupabaseCatalog() {
         name: part.name,
         image: part.image_url || "",
         category,
+        stockItemId: stock.id || null,
         sku: stock.sku || "SP7-LIVE",
         price: Number(stock.price || 0),
         stock: Number(stock.quantity || 0),
@@ -397,6 +398,215 @@ async function getProfile(userId) {
   return Array.isArray(rows) ? rows[0] : null;
 }
 
+function requestAccessToken(request) {
+  const authorization = String(request.headers?.authorization || "");
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] || "";
+}
+
+async function requireAuthenticatedUser(request, response, allowedRoles) {
+  const accessToken = requestAccessToken(request);
+  if (!accessToken) {
+    jsonError(response, 401, "Log in to continue.");
+    return null;
+  }
+
+  try {
+    const authResult = await getAuthUser(accessToken);
+    const user = authResult.user || authResult;
+    const profile = await getProfile(user.id);
+    const role = profile?.role || user.app_metadata?.role || "customer";
+
+    if (allowedRoles?.length && !allowedRoles.includes(role)) {
+      jsonError(response, 403, "This action is not available for your account role.");
+      return null;
+    }
+
+    return { accessToken, user, profile, role };
+  } catch (error) {
+    jsonError(response, 401, "Your login session has expired. Please log in again.");
+    return null;
+  }
+}
+
+async function ensureAssistantProfile(profile) {
+  if (profile?.role !== "assistant") return null;
+  const rows = await supabaseRest("assistant_profiles?on_conflict=id", {
+    method: "POST",
+    body: {
+      id: profile.id,
+      shop_name: profile.full_name || "Speedy7 Shop Assistant",
+      whatsapp_number: profile.phone || "Not supplied",
+      categories: [],
+      available: true
+    },
+    prefer: "resolution=merge-duplicates,return=representation"
+  });
+  return Array.isArray(rows) ? rows[0] : null;
+}
+
+function quoteStatusLabel(status) {
+  const labels = {
+    draft: "Draft",
+    sent_to_assistants: "Sent to assistants",
+    assistant_replied: "Shop replied",
+    owner_approved: "Owner approved",
+    sent_to_customer: "Sent to customer",
+    ordered: "Ordered",
+    closed: "Closed"
+  };
+  return labels[status] || status || "Pending";
+}
+
+function orderStatusLabel(status) {
+  return String(status || "placed").replaceAll("_", " ").replace(/^./, value => value.toUpperCase());
+}
+
+function inFilter(rows) {
+  return `(${rows.map(row => row.id).join(",")})`;
+}
+
+async function loadPermanentAccountData(context) {
+  const isStaff = ["assistant", "admin"].includes(context.role);
+  const isAdmin = context.role === "admin";
+  const userId = context.user.id;
+  const vehicleFilter = isStaff ? "" : `&user_id=eq.${encodeURIComponent(userId)}`;
+  const quoteFilter = isStaff ? "" : `&user_id=eq.${encodeURIComponent(userId)}`;
+  const orderFilter = isAdmin ? "" : `&user_id=eq.${encodeURIComponent(userId)}`;
+
+  const [vehicleRows, quoteRows, orderRows, partRows, supplierRows, stockRows, profileRows, inventoryRows] = await Promise.all([
+    supabaseRest(`vehicles?select=id,user_id,make,model,year,created_at${vehicleFilter}&order=created_at.desc&limit=200`, { prefer: false }),
+    supabaseRest(`quote_requests?select=id,user_id,vehicle_id,part_id,description,status,source,created_at${quoteFilter}&order=created_at.desc&limit=200`, { prefer: false }),
+    supabaseRest(`orders?select=id,user_id,status,fulfilment_method,total,customer_name,customer_phone,payment_method,created_at${orderFilter}&order=created_at.desc&limit=200`, { prefer: false }),
+    supabaseRest("parts?select=id,name&order=name.asc", { prefer: false }),
+    supabaseRest("suppliers?select=id,name&order=name.asc", { prefer: false }),
+    supabaseRest("stock_items?select=id,part_id,sku,quantity,price", { prefer: false }),
+    isAdmin ? supabaseRest("profiles?select=id,role,full_name,phone,created_at&order=created_at.desc&limit=500", { prefer: false }) : Promise.resolve([]),
+    isAdmin ? supabaseRest("inventory_transactions?select=id,stock_item_id,transaction_type,quantity_change,quantity_after,order_id,actor_id,note,created_at&order=created_at.desc&limit=200", { prefer: false }) : Promise.resolve([])
+  ]);
+
+  const identifiersPromise = vehicleRows.length
+    ? supabaseRest(`vehicle_identifiers?select=id,vehicle_id,vin,engine_number&vehicle_id=in.${inFilter(vehicleRows)}`, { prefer: false })
+    : Promise.resolve([]);
+  const repliesPromise = quoteRows.length
+    ? supabaseRest(`assistant_quote_replies?select=id,quote_request_id,assistant_id,supplier_id,price,quantity,condition,eta,note,approved_by_owner,created_at&quote_request_id=in.${inFilter(quoteRows)}&order=created_at.desc`, { prefer: false })
+    : Promise.resolve([]);
+  const orderItemsPromise = orderRows.length
+    ? supabaseRest(`order_items?select=id,order_id,stock_item_id,assistant_quote_reply_id,quantity,unit_price&order_id=in.${inFilter(orderRows)}`, { prefer: false })
+    : Promise.resolve([]);
+  const paymentsPromise = orderRows.length
+    ? supabaseRest(`payments?select=id,order_id,amount,method,status,reference,paid_at,created_at&order_id=in.${inFilter(orderRows)}`, { prefer: false })
+    : Promise.resolve([]);
+  const [identifierRows, replyRows, orderItemRows, paymentRows] = await Promise.all([
+    identifiersPromise,
+    repliesPromise,
+    orderItemsPromise,
+    paymentsPromise
+  ]);
+
+  const identifiersByVehicle = new Map();
+  for (const identifier of identifierRows) {
+    if (!identifiersByVehicle.has(identifier.vehicle_id)) identifiersByVehicle.set(identifier.vehicle_id, []);
+    identifiersByVehicle.get(identifier.vehicle_id).push(identifier);
+  }
+
+  const garage = vehicleRows.map(vehicle => {
+    const identifier = identifiersByVehicle.get(vehicle.id)?.[0] || {};
+    return {
+      id: vehicle.id,
+      vin: identifier.vin || "",
+      engine: identifier.engine_number || "",
+      label: [vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(" "),
+      make: vehicle.make,
+      model: vehicle.model,
+      year: vehicle.year ? String(vehicle.year) : ""
+    };
+  });
+
+  const partsById = new Map(partRows.map(part => [part.id, part.name]));
+  const suppliersById = new Map(supplierRows.map(supplier => [supplier.id, supplier.name]));
+  const stockById = new Map(stockRows.map(stock => [stock.id, stock]));
+  const vehiclesById = new Map(garage.map(vehicle => [vehicle.id, vehicle]));
+  const requestsById = new Map(quoteRows.map(request => [request.id, request]));
+
+  const quoteRequests = quoteRows.map(request => ({
+    id: request.id,
+    part: partsById.get(request.part_id) || request.description || "Part quote",
+    vehicle: vehiclesById.get(request.vehicle_id)?.label || "Vehicle not selected",
+    channel: request.source === "photo" ? "Photo upload" : "App search",
+    status: quoteStatusLabel(request.status),
+    created: request.created_at
+  }));
+
+  const quoteReplies = replyRows.map(reply => {
+    const request = requestsById.get(reply.quote_request_id);
+    return {
+      id: reply.id,
+      requestId: reply.quote_request_id,
+      shop: suppliersById.get(reply.supplier_id) || "Registered Speedy7 shop",
+      part: partsById.get(request?.part_id) || request?.description || "Part quote",
+      price: Number(reply.price || 0),
+      eta: reply.eta || "Quote",
+      condition: reply.condition || "Not specified",
+      note: reply.note || ""
+    };
+  });
+
+  const itemsByOrder = new Map();
+  for (const item of orderItemRows) {
+    if (!itemsByOrder.has(item.order_id)) itemsByOrder.set(item.order_id, []);
+    const stock = stockById.get(item.stock_item_id);
+    itemsByOrder.get(item.order_id).push({
+      id: item.id,
+      stockItemId: item.stock_item_id,
+      quoteReplyId: item.assistant_quote_reply_id,
+      name: partsById.get(stock?.part_id) || "Quoted part",
+      quantity: Number(item.quantity || 1),
+      price: Number(item.unit_price || 0)
+    });
+  }
+
+  const paymentsByOrder = new Map(paymentRows.map(payment => [payment.order_id, payment]));
+  const orders = orderRows.map(order => ({
+    id: order.id,
+    customerName: order.customer_name || context.profile?.full_name || "Speedy7 customer",
+    phone: order.customer_phone || context.profile?.phone || "",
+    fulfilment: order.fulfilment_method,
+    payment: order.payment_method,
+    paymentStatus: paymentsByOrder.get(order.id)?.status || "pending",
+    status: orderStatusLabel(order.status),
+    total: Number(order.total || 0),
+    items: itemsByOrder.get(order.id) || [],
+    createdAt: order.created_at
+  }));
+
+  const customerCount = profileRows.filter(profile => profile.role === "customer").length;
+  const openQuoteCount = quoteRows.filter(request => !["closed", "ordered"].includes(request.status)).length;
+  const stockUnits = stockRows.reduce((total, stock) => total + Number(stock.quantity || 0), 0);
+  const salesTotal = orderRows.reduce((total, order) => total + Number(order.total || 0), 0);
+
+  return {
+    garage,
+    quoteRequests,
+    quoteReplies,
+    orders,
+    customers: isAdmin ? profileRows.map(profile => ({
+      id: profile.id,
+      role: profile.role,
+      fullName: profile.full_name || "",
+      phone: profile.phone || "",
+      createdAt: profile.created_at
+    })) : [],
+    inventoryTransactions: isAdmin ? inventoryRows : [],
+    metrics: isAdmin ? [
+      [String(customerCount), "registered customers"],
+      [String(openQuoteCount), "open quote requests"],
+      [String(stockUnits), "units in stock"],
+      [`BWP ${salesTotal.toLocaleString("en-BW")}`, "recorded sales"]
+    ] : []
+  };
+}
+
 function cleanAuthProfile(profile, authUser) {
   return {
     id: profile?.id || authUser?.id || null,
@@ -543,6 +753,19 @@ async function handleApi(request, response, pathname) {
     return true;
   }
 
+  if (request.method === "GET" && pathname === "/api/account-data") {
+    const context = await requireAuthenticatedUser(request, response);
+    if (!context) return true;
+
+    try {
+      jsonResponse(response, 200, await loadPermanentAccountData(context));
+    } catch (error) {
+      console.error("Speedy7 account data error:", error);
+      jsonError(response, 500, "Your saved Speedy7 records could not be loaded.");
+    }
+    return true;
+  }
+
   if (request.method !== "POST") return false;
 
   const payload = await readBody(request);
@@ -578,6 +801,7 @@ async function handleApi(request, response, pathname) {
       const created = await createAuthUser({ email, password, fullName, phone, role });
       const user = created.user || created;
       const profile = await upsertProfile({ userId: user.id, role, fullName, phone });
+      await ensureAssistantProfile(profile);
       const session = await signInWithPassword(email, password);
       jsonResponse(response, 201, {
         session: {
@@ -616,6 +840,7 @@ async function handleApi(request, response, pathname) {
           phone: user.user_metadata?.phone || ""
         });
       }
+      await ensureAssistantProfile(profile);
       jsonResponse(response, 200, {
         session: {
           accessToken: session.access_token,
@@ -665,63 +890,279 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/vehicles") {
-    const vehicle = { ...payload, savedAt: new Date().toISOString() };
-    upsertById(state.garage, vehicle);
-    const syncItem = queueSync(state, "vehicle_registered", vehicle);
-    await syncQueuedItem(syncItem);
-    saveState(state);
-    jsonResponse(response, 201, { ...vehicle, syncStatus: syncItem.status });
+    const context = await requireAuthenticatedUser(request, response);
+    if (!context) return true;
+    const make = String(payload.make || "Unknown").trim() || "Unknown";
+    const model = String(payload.model || "Model").trim() || "Model";
+    const parsedYear = Number.parseInt(payload.year, 10);
+    const year = Number.isInteger(parsedYear) && parsedYear > 1900 && parsedYear < 2200 ? parsedYear : null;
+    const vin = String(payload.vin || "").trim() || null;
+    const engine = String(payload.engine || "").trim();
+
+    if (!engine) {
+      jsonError(response, 400, "Engine number is required to register a vehicle.");
+      return true;
+    }
+
+    let vehicleRow;
+    try {
+      const vehicleRows = await supabaseRest("vehicles", {
+        method: "POST",
+        body: { user_id: context.user.id, make, model, year },
+        prefer: "return=representation"
+      });
+      vehicleRow = vehicleRows[0];
+      await supabaseRest("vehicle_identifiers", {
+        method: "POST",
+        body: { vehicle_id: vehicleRow.id, vin, engine_number: engine },
+        prefer: "return=representation"
+      });
+      const label = [make, model, year].filter(Boolean).join(" ");
+      jsonResponse(response, 201, {
+        id: vehicleRow.id,
+        vin: vin || "",
+        engine,
+        label,
+        make,
+        model,
+        year: year ? String(year) : "",
+        syncStatus: "saved_to_supabase"
+      });
+    } catch (error) {
+      if (vehicleRow?.id) {
+        await supabaseRest(`vehicles?id=eq.${vehicleRow.id}`, { method: "DELETE", prefer: false }).catch(() => null);
+      }
+      jsonError(response, 400, error.message || "Vehicle could not be saved.");
+    }
     return true;
   }
 
   if (pathname === "/api/quote-requests") {
-    const quoteRequest = { ...payload, savedAt: new Date().toISOString() };
-    upsertById(state.quoteRequests, quoteRequest);
-    const syncItem = queueSync(state, "quote_request_created", quoteRequest);
-    await syncQueuedItem(syncItem);
-    saveState(state);
-    jsonResponse(response, 201, { ...quoteRequest, syncStatus: syncItem.status });
+    const context = await requireAuthenticatedUser(request, response);
+    if (!context) return true;
+    const vehicleId = String(payload.vehicleId || "").trim() || null;
+    const partId = String(payload.partId || "").trim() || null;
+    const description = String(payload.description || payload.part || "Part quote request").trim();
+    const source = /photo/i.test(String(payload.channel || payload.source || "")) ? "photo" : "app";
+
+    try {
+      if (vehicleId && context.role === "customer") {
+        const ownedVehicles = await supabaseRest(`vehicles?select=id&id=eq.${encodeURIComponent(vehicleId)}&user_id=eq.${encodeURIComponent(context.user.id)}&limit=1`, { prefer: false });
+        if (!ownedVehicles.length) {
+          jsonError(response, 403, "Choose a vehicle registered to your account.");
+          return true;
+        }
+      }
+
+      const rows = await supabaseRest("quote_requests", {
+        method: "POST",
+        body: {
+          user_id: context.user.id,
+          vehicle_id: vehicleId,
+          part_id: partId,
+          description,
+          status: "sent_to_assistants",
+          source
+        },
+        prefer: "return=representation"
+      });
+      const quote = rows[0];
+      jsonResponse(response, 201, {
+        id: quote.id,
+        part: String(payload.part || description),
+        vehicle: String(payload.vehicle || "Selected vehicle"),
+        channel: source === "photo" ? "Photo upload" : "App search",
+        status: quoteStatusLabel(quote.status),
+        created: quote.created_at,
+        syncStatus: "saved_to_supabase"
+      });
+    } catch (error) {
+      jsonError(response, 400, error.message || "Quote request could not be saved.");
+    }
     return true;
   }
 
   if (pathname === "/api/assistant-quote-replies") {
-    const reply = { ...payload, savedAt: new Date().toISOString() };
-    upsertById(state.quoteReplies, reply);
-    const syncItem = queueSync(state, "assistant_quote_reply_created", reply);
-    await syncQueuedItem(syncItem);
-    saveState(state);
-    jsonResponse(response, 201, { ...reply, syncStatus: syncItem.status });
+    const context = await requireAuthenticatedUser(request, response, ["assistant", "admin"]);
+    if (!context) return true;
+    const requestId = String(payload.requestId || "").trim();
+    const shopName = String(payload.shop || context.profile?.full_name || "Speedy7 Shop").trim();
+
+    try {
+      const requests = await supabaseRest(`quote_requests?select=id,part_id,description&id=eq.${encodeURIComponent(requestId)}&limit=1`, { prefer: false });
+      if (!requests.length) {
+        jsonError(response, 404, "The selected quote request no longer exists.");
+        return true;
+      }
+
+      const suppliers = await supabaseRest("suppliers?select=id,name", { prefer: false });
+      let supplier = suppliers.find(item => item.name.toLowerCase() === shopName.toLowerCase());
+      if (!supplier) {
+        const createdSuppliers = await supabaseRest("suppliers", {
+          method: "POST",
+          body: { name: shopName, whatsapp_number: context.profile?.phone || null },
+          prefer: "return=representation"
+        });
+        supplier = createdSuppliers[0];
+      }
+
+      if (context.role === "assistant") {
+        await supabaseRest("assistant_profiles?on_conflict=id", {
+          method: "POST",
+          body: {
+            id: context.user.id,
+            supplier_id: supplier.id,
+            shop_name: shopName,
+            whatsapp_number: context.profile?.phone || "Not supplied",
+            categories: [],
+            available: true
+          },
+          prefer: "resolution=merge-duplicates,return=minimal"
+        });
+      }
+
+      const rows = await supabaseRest("assistant_quote_replies", {
+        method: "POST",
+        body: {
+          quote_request_id: requestId,
+          assistant_id: context.role === "assistant" ? context.user.id : null,
+          supplier_id: supplier.id,
+          price: Number(payload.price || 0),
+          quantity: 1,
+          condition: String(payload.condition || "Not specified"),
+          eta: String(payload.eta || "Quote"),
+          note: String(payload.note || "")
+        },
+        prefer: "return=representation"
+      });
+      await supabaseRest(`quote_requests?id=eq.${encodeURIComponent(requestId)}`, {
+        method: "PATCH",
+        body: { status: "assistant_replied" },
+        prefer: "return=minimal"
+      });
+      const reply = rows[0];
+      jsonResponse(response, 201, {
+        id: reply.id,
+        requestId,
+        shop: supplier.name,
+        part: String(payload.part || requests[0].description || "Part quote"),
+        price: Number(reply.price),
+        eta: reply.eta,
+        condition: reply.condition,
+        note: reply.note || "",
+        syncStatus: "saved_to_supabase"
+      });
+    } catch (error) {
+      jsonError(response, 400, error.message || "Assistant quote could not be saved.");
+    }
     return true;
   }
 
   if (pathname === "/api/orders") {
-    const order = { ...payload, id: payload.id || `order-${Date.now()}`, savedAt: new Date().toISOString() };
-    upsertById(state.orders, order);
-    const syncItem = queueSync(state, "order_created", order);
-    await syncQueuedItem(syncItem);
-    saveState(state);
-    jsonResponse(response, 201, { ...order, syncStatus: syncItem.status });
+    const context = await requireAuthenticatedUser(request, response);
+    if (!context) return true;
+    const items = Array.isArray(payload.items) ? payload.items.map(item => ({
+      stock_item_id: item.stockItemId || item.stock_item_id || null,
+      quote_reply_id: item.quoteReplyId || item.quote_reply_id || null,
+      quantity: Number(item.quantity || 1),
+      unit_price: Number(item.price || item.unit_price || 0)
+    })).filter(item => item.stock_item_id || item.quote_reply_id) : [];
+
+    try {
+      const result = await supabaseRest("rpc/speedy7_create_order", {
+        method: "POST",
+        body: {
+          p_user_id: context.user.id,
+          p_customer_name: String(payload.customerName || context.profile?.full_name || ""),
+          p_customer_phone: String(payload.phone || context.profile?.phone || ""),
+          p_fulfilment_method: String(payload.fulfilment || "delivery"),
+          p_payment_method: String(payload.payment || "pay_on_delivery"),
+          p_items: items
+        },
+        prefer: false
+      });
+      jsonResponse(response, 201, {
+        id: result.order_id,
+        customerName: String(payload.customerName || context.profile?.full_name || "Speedy7 customer"),
+        phone: String(payload.phone || context.profile?.phone || ""),
+        fulfilment: String(payload.fulfilment || "delivery"),
+        payment: String(payload.payment || "pay_on_delivery"),
+        paymentStatus: "pending",
+        status: "Placed",
+        total: Number(result.total || 0),
+        items: payload.items || [],
+        syncStatus: "saved_to_supabase"
+      });
+    } catch (error) {
+      jsonError(response, 400, error.message || "Order could not be created.");
+    }
     return true;
   }
 
   if (pathname === "/api/compatibility-links") {
-    const link = { ...payload, id: payload.id || `link-${Date.now()}`, savedAt: new Date().toISOString() };
-    upsertById(state.compatibilityLinks, link);
-    const syncItem = queueSync(state, "compatibility_link_created", link);
-    await syncQueuedItem(syncItem);
-    saveState(state);
-    jsonResponse(response, 201, { ...link, syncStatus: syncItem.status });
+    const context = await requireAuthenticatedUser(request, response, ["admin"]);
+    if (!context) return true;
+    const partId = String(payload.partId || "").trim();
+    const vin = String(payload.vin || "").trim() || null;
+    const engine = String(payload.engine || "").trim() || null;
+
+    if (!partId || (!vin && !engine)) {
+      jsonError(response, 400, "Choose a part and provide a VIN or engine number.");
+      return true;
+    }
+
+    try {
+      const existingRows = await supabaseRest(`compatibility_links?select=id,part_id,vin,engine_number&part_id=eq.${encodeURIComponent(partId)}`, { prefer: false });
+      const existing = existingRows.find(link => (link.vin || null) === vin && (link.engine_number || null) === engine);
+      let link = existing;
+      if (!link) {
+        const rows = await supabaseRest("compatibility_links", {
+          method: "POST",
+          body: { part_id: partId, vin, engine_number: engine, notes: String(payload.vehicle || "Admin compatibility link") },
+          prefer: "return=representation"
+        });
+        link = rows[0];
+      }
+      await supabaseRest("audit_events", {
+        method: "POST",
+        body: { actor_id: context.user.id, action: "compatibility_link_saved", entity_table: "compatibility_links", entity_id: link.id },
+        prefer: "return=minimal"
+      });
+      jsonResponse(response, 201, {
+        id: link.id,
+        partId,
+        vin: vin || "",
+        engine: engine || "",
+        vehicle: String(payload.vehicle || ""),
+        syncStatus: "saved_to_supabase"
+      });
+    } catch (error) {
+      jsonError(response, 400, error.message || "Compatibility link could not be saved.");
+    }
     return true;
   }
 
   if (pathname === "/api/stock-upload") {
+    const context = await requireAuthenticatedUser(request, response, ["admin"]);
+    if (!context) return true;
     const rows = parseStockRows(payload.rows);
-    const upload = { id: `upload-${Date.now()}`, rows, savedAt: new Date().toISOString() };
-    state.stockUploads.unshift(upload);
-    const syncItem = queueSync(state, "stock_upload_created", upload);
-    await syncQueuedItem(syncItem);
-    saveState(state);
-    jsonResponse(response, 201, { rowsSaved: rows.length, rows, syncStatus: syncItem.status });
+    try {
+      const result = await supabaseRest("rpc/speedy7_upsert_stock", {
+        method: "POST",
+        body: {
+          p_actor_id: context.user.id,
+          p_rows: rows.map(row => ({ ...row, condition: "New" }))
+        },
+        prefer: false
+      });
+      jsonResponse(response, 201, {
+        rowsSaved: Number(result.rows_saved || rows.length),
+        rows,
+        syncStatus: "saved_to_supabase"
+      });
+    } catch (error) {
+      jsonError(response, 400, error.message || "Stock upload could not be saved.");
+    }
     return true;
   }
 

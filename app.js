@@ -81,16 +81,19 @@ function roleLabel(role) {
 async function apiRequest(path, payload) {
   if (!backendAvailable && path !== '/api/bootstrap') return null;
   try {
-    const options = payload === undefined ? {} : {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    };
+    const headers = {};
+    if (payload !== undefined) headers['Content-Type'] = 'application/json';
+    if (authState.session?.accessToken) headers.Authorization = 'Bearer ' + authState.session.accessToken;
+    const options = payload === undefined
+      ? { headers }
+      : { method: 'POST', headers, body: JSON.stringify(payload) };
     const response = await fetch(path, options);
-    if (!response.ok) throw new Error('Request failed');
-    return await response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Request failed');
+    return data;
   } catch (error) {
-    console.warn('Speedy7 local API unavailable:', path, error.message);
+    console.warn('Speedy7 API request failed:', path, error.message);
+    if (path !== '/api/bootstrap' && path !== '/api/connection') toast(error.message || 'Speedy7 could not save that change.');
     return null;
   }
 }
@@ -115,6 +118,11 @@ function saveAuth(data) {
 }
 function clearAuth() {
   authState = { session: null, profile: null };
+  garage = [];
+  quoteRequests = [];
+  quoteReplies = [];
+  orders = [];
+  selectedVehicleId = null;
   window.localStorage.removeItem(authStorageKey);
   window.sessionStorage.removeItem(authStorageKey);
   updateAuthUi();
@@ -133,6 +141,7 @@ async function logoutCurrentUser() {
   closeMobileAccount();
   clearAuth();
   showView('customerView');
+  renderAll();
   toast('Logged out. Create an account or log in to continue.');
 }
 async function restoreAuth() {
@@ -245,6 +254,19 @@ async function loadBackendData() {
   garage = data.garage?.length ? data.garage : garage;
   orders = data.orders || [];
   selectedVehicleId = garage[0]?.id || vehicles[0]?.id;
+}
+async function loadAccountData() {
+  if (!authState.session?.accessToken) return false;
+  const data = await apiRequest('/api/account-data');
+  if (!data) return false;
+  garage = data.garage || [];
+  quoteRequests = data.quoteRequests || [];
+  quoteReplies = data.quoteReplies || [];
+  orders = data.orders || [];
+  if (data.metrics?.length) metrics = data.metrics;
+  selectedVehicleId = garage[0]?.id || null;
+  renderAll();
+  return true;
 }
 async function loadConnectionStatus() {
   const status = await apiRequest('/api/connection');
@@ -418,6 +440,7 @@ function initEvents() {
     setMobileAuthMode(mobileAuthMode);
     if (!data?.profile) return;
     saveAuth(data);
+    await loadAccountData();
     showProfileHome(data.profile);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     toast(data.message || 'Welcome to Speedy7.');
@@ -438,21 +461,23 @@ function initEvents() {
     });
     if (!data?.profile) return;
     saveAuth(data);
+    await loadAccountData();
     showProfileHome(data.profile);
     toast(data.message || 'Logged in.');
   });
   $('logoutBtn').addEventListener('click', logoutCurrentUser);
-  $('carForm').addEventListener('submit', event => {
+  $('carForm').addEventListener('submit', async event => {
     event.preventDefault();
     const label = $('vehicleInput').value.trim() || 'Vehicle pending details';
     const words = label.split(' ');
     const car = { id: 'veh-' + Date.now(), vin: $('vinInput').value.trim(), engine: $('engineInput').value.trim(), label, make: words[0] || 'Unknown', model: words.slice(1, -1).join(' ') || 'Model', year: words[words.length - 1] || 'Year' };
-    garage.unshift(car);
-    selectedVehicleId = car.id;
-    $('searchInput').value = car.engine;
+    const savedCar = await apiRequest('/api/vehicles', car);
+    if (!savedCar) return;
+    garage.unshift(savedCar);
+    selectedVehicleId = savedCar.id;
+    $('searchInput').value = savedCar.engine;
     renderAll();
-    apiRequest('/api/vehicles', car);
-    toast('Car registered and linked to engine search.');
+    toast('Car saved and linked to engine search.');
   });
   $('searchInput').addEventListener('input', renderParts);
   $('resetFiltersBtn').addEventListener('click', () => { activeCategory = 'All'; $('searchInput').value = selectedVehicle()?.engine || ''; renderAll(); });
@@ -463,7 +488,7 @@ function initEvents() {
     renderCategories();
     renderParts();
   });
-  $('partsList').addEventListener('click', event => {
+  $('partsList').addEventListener('click', async event => {
     const zoomButton = event.target.closest('[data-zoom-part]');
     if (zoomButton) {
       openPartZoom(zoomButton.dataset.zoomPart);
@@ -474,12 +499,17 @@ function initEvents() {
     const part = parts.find(item => item.id === button.dataset.id);
     if (!part) return;
     if (button.dataset.action === 'quote') {
-      const request = { id: 'qr-' + Date.now(), part: part.name, vehicle: selectedVehicle()?.label || 'Selected vehicle', channel: 'App search', status: 'Sent to assistants', created: 'just now' };
-      const reply = { id: 'q-' + Date.now(), requestId: request.id, shop: part.supplier, part: part.name, price: part.price, eta: part.eta, condition: part.condition, note: 'Quote created from matching stock.' };
+      const vehicle = selectedVehicle();
+      const request = await apiRequest('/api/quote-requests', {
+        partId: part.id,
+        vehicleId: vehicle?.id,
+        part: part.name,
+        description: part.name,
+        vehicle: vehicle?.label || 'Selected vehicle',
+        channel: 'App search'
+      });
+      if (!request) return;
       quoteRequests.unshift(request);
-      quoteReplies.unshift(reply);
-      apiRequest('/api/quote-requests', request);
-      apiRequest('/api/assistant-quote-replies', reply);
       renderQuotes();
       toast('Quote request sent to registered shops.');
     }
@@ -504,13 +534,19 @@ function initEvents() {
     reader.onload = () => { $('photoPreview').innerHTML = '<img src="' + reader.result + '" alt="Uploaded part preview">'; };
     reader.readAsDataURL(file);
   });
-  $('photoQuoteForm').addEventListener('submit', event => {
+  $('photoQuoteForm').addEventListener('submit', async event => {
     event.preventDefault();
     const vehicle = garage.find(item => item.id === $('photoVehicleSelect').value) || selectedVehicle();
     const description = $('photoDescription').value.trim() || 'Unknown part from customer photo';
-    const request = { id: 'qr-' + Date.now(), part: description, vehicle: vehicle?.label || 'Selected vehicle', channel: 'Photo upload', status: 'Pending admin review', created: 'just now' };
+    const request = await apiRequest('/api/quote-requests', {
+      vehicleId: vehicle?.id,
+      part: description,
+      description,
+      vehicle: vehicle?.label || 'Selected vehicle',
+      channel: 'Photo upload'
+    });
+    if (!request) return;
     quoteRequests.unshift(request);
-    apiRequest('/api/quote-requests', request);
     selectedRequest = request.id;
     renderQuotes();
     showView('assistantView');
@@ -523,12 +559,16 @@ function initEvents() {
     renderQuotes();
     toast('Request selected for assistant reply.');
   });
-  $('assistantReplyForm').addEventListener('submit', event => {
+  $('assistantReplyForm').addEventListener('submit', async event => {
     event.preventDefault();
     const request = quoteRequests.find(item => item.id === selectedRequest) || quoteRequests[0];
-    const reply = { id: 'q-' + Date.now(), requestId: request?.id || 'manual', shop: assistantShop.value.trim(), part: request?.part || 'Manual quote', price: Number(assistantPrice.value || 0), eta: assistantEta.value, condition: assistantCondition.value, note: assistantNote.value.trim() };
+    if (!request) {
+      toast('Select a customer quote request first.');
+      return;
+    }
+    const reply = await apiRequest('/api/assistant-quote-replies', { requestId: request.id, shop: assistantShop.value.trim(), part: request.part || 'Manual quote', price: Number(assistantPrice.value || 0), eta: assistantEta.value, condition: assistantCondition.value, note: assistantNote.value.trim() });
+    if (!reply) return;
     quoteReplies.unshift(reply);
-    apiRequest('/api/assistant-quote-replies', reply);
     renderQuotes();
     showView('quotesView');
     toast('Assistant quote added for owner approval.');
@@ -542,44 +582,51 @@ function initEvents() {
     if (!id) return;
     const reply = quoteReplies.find(item => item.id === id);
     if (!reply) return;
-    cart.push({ id: 'quote-' + reply.id, name: reply.part, category: 'Quote', supplier: reply.shop, price: reply.price });
+    cart.push({ id: 'quote-' + reply.id, quoteReplyId: reply.id, name: reply.part, category: 'Quote', supplier: reply.shop, price: reply.price });
     renderCart();
     toast(orderButton ? 'Quote sent to customer and added to order.' : 'Quote added to order.');
     if (orderButton) showView('ordersView');
   });
   $('checkoutBtn').addEventListener('click', () => showView('ordersView'));
-  $('checkoutForm').addEventListener('submit', event => {
+  $('checkoutForm').addEventListener('submit', async event => {
     event.preventDefault();
     const total = cart.reduce((sum, item) => sum + item.price, 0);
-    if (cart.length) {
-      const order = { id: 'order-' + Date.now(), customerName: $('customerName').value, phone: $('customerPhone').value, fulfilment: $('fulfilment').value, payment: $('payment').value, total, items: cart };
-      orders.unshift(order);
-      apiRequest('/api/orders', order);
+    if (!cart.length) {
+      $('orderStatus').textContent = 'Add at least one part before placing an order.';
+      toast('Cart is empty.');
+      return;
     }
-    $('orderStatus').textContent = cart.length ? 'Order placed for ' + $('customerName').value + '. ' + $('fulfilment').value + ' selected. Total ' + money(total) + '.' : 'Add at least one part before placing an order.';
-    toast(cart.length ? 'Order created.' : 'Cart is empty.');
+    const order = await apiRequest('/api/orders', { customerName: $('customerName').value, phone: $('customerPhone').value, fulfilment: $('fulfilment').value, payment: $('payment').value, total, items: cart });
+    if (!order) return;
+    orders.unshift(order);
+    cart = [];
+    renderCart();
+    $('orderStatus').textContent = 'Order placed for ' + order.customerName + '. ' + order.fulfilment + ' selected. Total ' + money(order.total) + '.';
+    toast('Order saved to Speedy7.');
   });
   $('whatsappLeadBtn').addEventListener('click', () => { showView('assistantView'); toast('Mock WhatsApp request sent to registered assistants.'); });
   $('socialLeadBtn').addEventListener('click', () => toast('Facebook Marketplace lead tagged for Speedy7 follow-up.'));
-  $('adminCarForm').addEventListener('submit', event => {
+  $('adminCarForm').addEventListener('submit', async event => {
     event.preventDefault();
     const part = parts.find(item => item.id === $('adminPartSelect').value);
     if (part) {
       const vin = $('adminVin').value.trim();
       const engine = $('adminEngine').value.trim();
+      const savedLink = await apiRequest('/api/compatibility-links', { partId: part.id, partName: part.name, vin, engine, vehicle: $('adminVehicle').value.trim() });
+      if (!savedLink) return;
       if (vin && !part.vins.includes(vin)) part.vins.push(vin);
       if (engine && !part.engines.includes(engine)) part.engines.push(engine);
-      apiRequest('/api/compatibility-links', { partId: part.id, partName: part.name, vin, engine, vehicle: $('adminVehicle').value.trim() });
     }
     toast('Compatibility saved to VIN and engine lookup.');
     renderParts();
   });
-  $('stockForm').addEventListener('submit', event => {
+  $('stockForm').addEventListener('submit', async event => {
     event.preventDefault();
     const rowsText = $('stockRows').value;
     const rows = rowsText.split('\n').filter(Boolean).length;
-    apiRequest('/api/stock-upload', { rows: rowsText });
-    toast(rows + ' stock rows staged for upload.');
+    const result = await apiRequest('/api/stock-upload', { rows: rowsText });
+    if (!result) return;
+    toast((result.rowsSaved || rows) + ' stock rows saved to Supabase.');
   });
 }
 function renderAll() {
