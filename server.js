@@ -18,6 +18,7 @@ const supabaseUrl = trimTrailingSlash(process.env.SUPABASE_URL || "");
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "";
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const adminInviteCode = process.env.ADMIN_INVITE_CODE || "";
+const passwordResetRedirectUrl = process.env.PASSWORD_RESET_REDIRECT_URL || "https://speedy7-rust.vercel.app/";
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -852,6 +853,59 @@ async function handleApi(request, response, pathname) {
       });
     } catch (error) {
       jsonError(response, 401, "Login failed. Check the email and password.");
+    }
+    return true;
+  }
+
+  if (pathname === "/api/auth/forgot-password") {
+    const email = String(payload.email || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      jsonError(response, 400, "Enter the email address used for your Speedy7 account.");
+      return true;
+    }
+
+    try {
+      await supabaseAuthRequest(`recover?redirect_to=${encodeURIComponent(passwordResetRedirectUrl)}`, {
+        method: "POST",
+        body: { email }
+      });
+      jsonResponse(response, 200, {
+        ok: true,
+        message: "If that email is registered, a secure password reset link is on the way."
+      });
+    } catch (error) {
+      const rateLimited = /rate|seconds|minute|hour/i.test(error.message);
+      jsonError(response, rateLimited ? 429 : 400, rateLimited
+        ? "Please wait before requesting another password reset email."
+        : "The reset email could not be sent. Please check the address and try again.");
+    }
+    return true;
+  }
+
+  if (pathname === "/api/auth/reset-password") {
+    const accessToken = String(payload.accessToken || "").trim();
+    const password = String(payload.password || "");
+    if (!accessToken) {
+      jsonError(response, 401, "This password reset link is missing or has expired.");
+      return true;
+    }
+    if (password.length < 8) {
+      jsonError(response, 400, "Use a new password with at least 8 characters.");
+      return true;
+    }
+
+    try {
+      await supabaseAuthRequest("user", {
+        method: "PUT",
+        accessToken,
+        body: { password }
+      });
+      jsonResponse(response, 200, {
+        ok: true,
+        message: "Password updated. You can now log in to Speedy7."
+      });
+    } catch (error) {
+      jsonError(response, 401, "This password reset link has expired. Request a new one.");
     }
     return true;
   }

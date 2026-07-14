@@ -13,6 +13,7 @@ let orders = [];
 let backendAvailable = false;
 let authState = { session: null, profile: null };
 let mobileAuthMode = 'signup';
+let passwordRecoveryToken = '';
 let partsView = window.localStorage.getItem('speedy7.parts-view') === 'grid' ? 'grid' : 'list';
 
 const authStorageKey = 'speedy7.auth';
@@ -127,6 +128,37 @@ function clearAuth() {
   window.sessionStorage.removeItem(authStorageKey);
   updateAuthUi();
 }
+function setFormStatus(element, message, type) {
+  element.textContent = message || '';
+  element.classList.toggle('is-success', type === 'success');
+  element.classList.toggle('is-error', type === 'error');
+}
+function openPasswordReset(mode = 'request') {
+  const isUpdate = mode === 'update';
+  $('passwordResetRequestForm').hidden = isUpdate;
+  $('passwordUpdateForm').hidden = !isUpdate;
+  $('passwordResetTitle').textContent = isUpdate ? 'Choose a new password' : 'Reset your password';
+  if (!isUpdate) {
+    $('passwordResetEmail').value = $('mobileEmail').value.trim() || $('loginEmail').value.trim();
+    setFormStatus($('passwordResetRequestStatus'), '', '');
+  } else {
+    setFormStatus($('passwordUpdateStatus'), '', '');
+  }
+  $('passwordResetModal').hidden = false;
+  document.body.classList.add('password-reset-open');
+  window.setTimeout(() => (isUpdate ? $('passwordUpdateValue') : $('passwordResetEmail')).focus(), 0);
+}
+function closePasswordReset() {
+  $('passwordResetModal').hidden = true;
+  document.body.classList.remove('password-reset-open');
+}
+function openRecoveryLink() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (hash.get('type') !== 'recovery' || !hash.get('access_token')) return;
+  passwordRecoveryToken = hash.get('access_token');
+  document.body.classList.remove('mobile-splash-active');
+  openPasswordReset('update');
+}
 function openMobileAccount() {
   if (!authState.profile) return;
   $('mobileAccountSheet').hidden = false;
@@ -168,6 +200,7 @@ function updateAuthControls() {
   if ($('phoneLabel')) $('phoneLabel').hidden = !isSignup;
   if ($('adminInviteLabel')) $('adminInviteLabel').hidden = !(isSignup && role === 'admin');
   if ($('authSubmitBtn')) $('authSubmitBtn').textContent = isSignup ? 'Create account' : 'Log in';
+  if ($('forgotPasswordBtn')) $('forgotPasswordBtn').hidden = isSignup;
   if ($('loginPassword')) $('loginPassword').autocomplete = isSignup ? 'new-password' : 'current-password';
 }
 function setMobileAuthMode(mode) {
@@ -185,6 +218,7 @@ function setMobileAuthMode(mode) {
   if ($('mobilePassword')) $('mobilePassword').autocomplete = isSignup ? 'new-password' : 'current-password';
   if ($('mobileAuthTitle')) $('mobileAuthTitle').textContent = isSignup ? 'Create your account' : 'Welcome back';
   if ($('mobileAuthSubmit')) $('mobileAuthSubmit').textContent = isSignup ? 'Create account' : 'Log in';
+  if ($('mobileForgotPasswordBtn')) $('mobileForgotPasswordBtn').hidden = isSignup;
   if ($('mobileAuthHint')) $('mobileAuthHint').textContent = isSignup
     ? 'Your vehicle details will be saved to your Speedy7 account.'
     : 'Log in to continue with your saved vehicles, quotes, and orders.';
@@ -409,6 +443,59 @@ function initEvents() {
   $('mobileAccountBackdrop').addEventListener('click', closeMobileAccount);
   $('mobileAccountClose').addEventListener('click', closeMobileAccount);
   $('mobileLogoutBtn').addEventListener('click', logoutCurrentUser);
+  $('mobileForgotPasswordBtn').addEventListener('click', () => openPasswordReset('request'));
+  $('forgotPasswordBtn').addEventListener('click', () => openPasswordReset('request'));
+  $('passwordResetBackdrop').addEventListener('click', closePasswordReset);
+  $('passwordResetClose').addEventListener('click', closePasswordReset);
+  $('passwordResetRequestForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = $('passwordResetRequestBtn');
+    button.disabled = true;
+    button.textContent = 'Sending...';
+    setFormStatus($('passwordResetRequestStatus'), '', '');
+    const data = await authRequest('/api/auth/forgot-password', {
+      email: $('passwordResetEmail').value.trim()
+    });
+    button.disabled = false;
+    button.textContent = 'Send reset link';
+    if (!data) {
+      setFormStatus($('passwordResetRequestStatus'), 'The reset email could not be sent. Please try again.', 'error');
+      return;
+    }
+    setFormStatus($('passwordResetRequestStatus'), data.message, 'success');
+  });
+  $('passwordUpdateForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const password = $('passwordUpdateValue').value;
+    const confirmPassword = $('passwordUpdateConfirm').value;
+    if (password !== confirmPassword) {
+      setFormStatus($('passwordUpdateStatus'), 'The two passwords do not match.', 'error');
+      return;
+    }
+    const button = $('passwordUpdateBtn');
+    button.disabled = true;
+    button.textContent = 'Saving...';
+    const data = await authRequest('/api/auth/reset-password', {
+      accessToken: passwordRecoveryToken,
+      password
+    });
+    button.disabled = false;
+    button.textContent = 'Save new password';
+    if (!data) {
+      setFormStatus($('passwordUpdateStatus'), 'The password could not be updated. Request a new reset link.', 'error');
+      return;
+    }
+    passwordRecoveryToken = '';
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    $('passwordUpdateValue').value = '';
+    $('passwordUpdateConfirm').value = '';
+    setMobileAuthMode('login');
+    setFormStatus($('passwordUpdateStatus'), data.message, 'success');
+    window.setTimeout(() => {
+      closePasswordReset();
+      toast('Password updated. Log in with your new password.');
+    }, 900);
+  });
   $('mobileAssistantBtn').addEventListener('click', () => {
     closeMobileAccount();
     showView('assistantView');
@@ -644,6 +731,7 @@ async function startApp() {
   initEvents();
   renderAll();
   updateAuthUi();
+  openRecoveryLink();
 }
 startApp();
 
